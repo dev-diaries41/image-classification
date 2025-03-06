@@ -14,6 +14,8 @@ def main():
     parser = argparse.ArgumentParser(description="Image classification pipeline")
     parser.add_argument("--mode", type=str, choices=["train", "inference"], required=True,
                         help="Choose 'train' to train the model or 'inference' to run enhancement on an image file")
+    parser.add_argument("--class_names", type=str, required=True, help="Path to a text file with class names")
+    parser.add_argument("--model_type", type=str, default="resnet",choices=["resnet", "mobilenet"],  help="Type of model to use")
     parser.add_argument("--dataset", type=str, help="Directory with training data")
     parser.add_argument("--input", type=str, help="Image file for inference")
     parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
@@ -23,7 +25,6 @@ def main():
                         help="Filename to save/load model checkpoint")
     parser.add_argument("--model", type=str, default="", help="Path to model to use for inference")
     parser.add_argument("--plot_file", type=str, default="results/loss_accuracy_plot.png", help="Filename for saving the loss plot")
-    parser.add_argument("--class_names", type=str, required=True, help="Path to a text file with class names")
     args = parser.parse_args()
 
     class_names = load_class_names(args.class_names)
@@ -35,19 +36,21 @@ def main():
     if args.mode == "inference":
         if not args.model or not args.input:
             raise ValueError("For inference, please provide model path with --model and input image with --input")
+        if not os.path.exists(args.model):
+            raise ValueError("The model path you provided does not exist.")
         if not os.path.exists(args.input):
             raise ValueError("The input image you provided does not exist.")
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Using device: {device}")
 
-    model = ImageClassifierMobile(num_classes=len(class_names))
-    
-    if os.path.exists(args.model):
-        print("Loading existing model...")
-        model.load_state_dict(torch.load(args.model, map_location=device))
+    if args.model_type == "resnet":
+        model = ImageClassifier(num_classes=len(class_names))
+    elif args.model_type == "mobilenet":
+        model = ImageClassifierMobile(num_classes=len(class_names))
     else:
-        print("No existing model found. Using default pre-trained model (will train if dataset is provided).")
+        raise ValueError("The model_type provided is invalid. Choose between 'resnet' or 'mobilenet'")
+
 
     if args.mode == "train":
         print("Training model...")
@@ -69,6 +72,8 @@ def main():
         plot_results(train_losses, test_losses, test_acc, output_path=args.plot_file)
     elif args.mode == "inference":
         print("Preparing inference...")
+        print("Loading model...")
+        model.load_state_dict(torch.load(args.model, map_location=device))
         sample_image = args.input
         prediction = inference(model, device, sample_image, class_names)
         print(f"Predicted class for the image '{sample_image}': {prediction}")
