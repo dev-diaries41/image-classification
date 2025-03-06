@@ -119,17 +119,18 @@ python main.py --mode inference --model /path/to/mobilenet_checkpoint --input /p
 #### Output:
 - The predicted class for the input image will be printed on the console.
 
+
 ### Model Conversion (PyTorch to TFLite)
 
 To convert the trained PyTorch model to **TFLite** format for deployment on mobile devices, use the `convert.py` script.
 
 ```bash
-python convert.py --model_type resnet18
+python convert.py --model checkpoint/screenshot_best.pt --output models/screenshot.tflite --num_classes 3 --model_type resnet
 ```
 
-#### Example for MobileNetV3:
+#### Example for MobileNet:
 ```bash
-python convert.py --model_type mobilenetv3
+python convert.py --model checkpoint/screenshot_mobile_best.pt --output models/screenshot_mobile.tflite --num_classes 3 --model_type mobilenet
 ```
 
 #### Output:
