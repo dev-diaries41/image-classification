@@ -15,15 +15,15 @@ def main():
     parser.add_argument("--mode", type=str, choices=["train", "inference"], required=True,
                         help="Choose 'train' to train the model or 'inference' to run enhancement on an image file")
     parser.add_argument("--class_names", type=str, required=True, help="Path to a text file with class names")
-    parser.add_argument("--model_type", type=str, default="resnet",choices=["resnet", "mobilenet"],  help="Type of model to use")
-    parser.add_argument("--dataset", type=str, help="Directory with training data")
-    parser.add_argument("--input", type=str, help="Image file for inference")
-    parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
-    parser.add_argument("--batch_size", type=int, default=8, help="Batch size for training")
+    parser.add_argument("-t", "--model_type", type=str, default="resnet",choices=["resnet", "mobilenet"],  help="Type of model to use")
+    parser.add_argument("-d", "--dataset", type=str, help="Directory with training data")
+    parser.add_argument("-i", "--input", type=str, help="Image file for inference")
+    parser.add_argument("-e", "--epochs", type=int, default=100, help="Number of training epochs")
+    parser.add_argument("-b", "--batch_size", type=int, default=8, help="Batch size for training")
     parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
     parser.add_argument("--checkpoint", type=str, default="checkpoint/screenshot_model", 
                         help="Filename to save/load model checkpoint")
-    parser.add_argument("--model", type=str, default="", help="Path to model to use for inference")
+    parser.add_argument("-m","--model", type=str, default="", help="Path to model to use for inference")
     parser.add_argument("--plot_file", type=str, default="results/loss_accuracy_plot.png", help="Filename for saving the loss plot")
     args = parser.parse_args()
 
