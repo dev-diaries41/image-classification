@@ -7,7 +7,7 @@ from data import Dataset
 from train import train
 from plot import plot_results
 from inference import inference
-from utils import read_dataset_dir, get_labels, load_class_names
+from utils import read_dataset_dir, load_class_names
 import argparse
 
 def main():
@@ -53,11 +53,12 @@ def main():
 
 
     if args.mode == "train":
-        print("Training model...")
-        image_paths = read_dataset_dir(args.dataset)
-        labels = get_labels(image_paths)
-        print(f"Dataset size: ", len(labels))
+        image_paths, labels = read_dataset_dir(args.dataset)
         dataset = Dataset(image_paths, labels)
+        
+        print("Training model...")
+        print(f"Dataset size: ", len(labels))
+        labels = [class_names.index(label) for label in labels]
         
         train_size = int(0.75 * len(dataset))
         test_size = len(dataset) - train_size
