@@ -53,12 +53,12 @@ def main():
 
 
     if args.mode == "train":
-        image_paths, labels = read_dataset_dir(args.dataset)
-        dataset = Dataset(image_paths, labels)
-        
+        file_paths, labels = read_dataset_dir(args.dataset)
+        numbered_labels = [class_names.index(label) for label in labels]
+        dataset = Dataset(file_paths, numbered_labels)
+
         print("Training model...")
-        print(f"Dataset size: ", len(labels))
-        labels = [class_names.index(label) for label in labels]
+        print(f"Dataset size: ", len(numbered_labels))
         
         train_size = int(0.75 * len(dataset))
         test_size = len(dataset) - train_size
@@ -67,7 +67,7 @@ def main():
         test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
         train_losses, test_losses, test_acc = train(
-            model, train_loader, device, checkpoint_path=args.checkpoint, epochs=args.epochs, lr=args.lr,
+            model=model, train_loader=train_loader, device=device, checkpoint_path=args.checkpoint, epochs=args.epochs, lr=args.lr,
               test_loader=test_loader
         )
         plot_results(train_losses, test_losses, test_acc, output_path=args.plot_file)

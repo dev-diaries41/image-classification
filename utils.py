@@ -14,7 +14,7 @@ def read_dataset_dir(dataset_dir):
         if os.path.isdir(class_dir):
             class_dir_files = os.listdir(class_dir)
             for path in class_dir_files:
-                file_paths.append(path)
+                file_paths.append(os.path.join(class_dir, path))
                 labels.append(class_name)
     return file_paths, labels
 
