@@ -38,7 +38,7 @@ def main():
     infer_parser.add_argument("-m","--model", required=True, type=str, default="", help="Path to model to use for inference")
     infer_parser.add_argument("-i", "--input-image", required=True, type=str, help="Image file for inference")
 
-    val_parser = subparsers.add_parser('validation')
+    val_parser = subparsers.add_parser('validation', parents=[common_parent])
     val_parser.add_argument("-d", "--data", required=True, type=str, help="Directory with training data")
     val_parser.add_argument('--ckpt', required=True, help='Path to saved checkpoint')
     
