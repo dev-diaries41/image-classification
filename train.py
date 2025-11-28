@@ -42,7 +42,7 @@ def train(model, dataset_dir, class_names, device, checkpoint_path, final_model_
             if use_hebb:
                 y_pred, acts = model(images, return_activations = True)
             else:
-                 y_pred, _ = model(images)
+                 y_pred = model(images)
             loss = criterion(y_pred, labels)
             loss.backward()
             
@@ -111,5 +111,14 @@ def evaluate(model, data_loader):
             total += labels.size(0)
     avg_loss = total_loss / len(data_loader)
     accuracy = correct / total if total > 0 else 0
-    model.train()  # Switch back to training mode
+    model.train()
     return avg_loss, accuracy
+
+
+def validate(model, dataset_dir, class_names):
+    file_paths, labels = read_dataset_dir(dataset_dir)
+    numbered_labels = [class_names.index(label) for label in labels]
+    dataset = ImageDataset(file_paths, numbered_labels)        
+    loader = DataLoader(dataset, batch_size=1, shuffle=False)
+    return evaluate(model, loader)
+
