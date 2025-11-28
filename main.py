@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import random
 from torch.utils.data import DataLoader, random_split
-from model import ImageClassifier, ImageClassifierMobile, ImageClassifierWithMLP
+from model import ImageClassifier, ImageClassifierWithMLP
 from data import Dataset
 from train import train
 from plot import plot_results
@@ -27,6 +27,7 @@ def main():
     common_parent = argparse.ArgumentParser(add_help=False)
     common_parent.add_argument("--class-names", type=str, required=True, help="Path to a text file with class names")
     common_parent.add_argument("-t", "--model-type", type=str, required=True, choices=["resnet", "mobilenet"],  help="Type of model to use")
+    common_parent.add_argument("--use-hebb", action="store_true",  help="Use hebbian learning")
     subparsers = parser.add_subparsers(dest='mode')
 
     train_parser = subparsers.add_parser("train", parents=[common_parent])
@@ -59,9 +60,9 @@ def main():
     print(f"Using device: {device}")
 
     if args.model_type == "resnet":
-        model = ImageClassifierWithMLP(num_classes=len(class_names))
+        model = ImageClassifierWithMLP(num_classes=len(class_names)) if args.use_hebb else ImageClassifier(num_classes=len(class_names), architecture="resnet")
     elif args.model_type == "mobilenet":
-        model = ImageClassifierWithMLP(num_classes=len(class_names), backbone="mobilenet")
+        model = ImageClassifierWithMLP(num_classes=len(class_names), backbone="mobilenet") if args.use_hebb else ImageClassifier(num_classes=len(class_names), architecture="mobilenet")
     else:
         raise ValueError("The model_type provided is invalid. Choose between 'resnet' or 'mobilenet'")
 
@@ -80,14 +81,15 @@ def main():
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
         test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
-        checkpoint_path = get_new_filename("checkpoints", f"checkpoint_best_{args.model_type}_", ".pt")
-        final_model_path = get_new_filename("models", f"model_{args.model_type}_", ".pt")
+        hebb_prefix = "hebb" if args.use_hebb else ""
+        checkpoint_path = get_new_filename("checkpoints", f"checkpoint_best_{args.model_type}_{hebb_prefix}", ".pt")
+        final_model_path = get_new_filename("models", f"model_{args.model_type}_{hebb_prefix}", ".pt")
 
         train_losses, test_losses, test_acc = train(
             model=model, train_loader=train_loader, device=device, checkpoint_path=checkpoint_path, final_model_path=final_model_path, epochs=args.epochs, lr=args.lr,
               test_loader=test_loader
         )
-        plot_path = get_new_filename("results", f"loss_accuracy_plot_{args.model_type}_", ".png")
+        plot_path = get_new_filename("results", f"loss_accuracy_plot_{args.model_type}_{hebb_prefix}", ".png")
         plot_results(train_losses, test_losses, test_acc, output_path=plot_path)
     elif args.mode == "inference":
         print("Preparing inference...")
