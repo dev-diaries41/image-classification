@@ -5,15 +5,29 @@ from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
 from utils import read_dataset_dir
 from data import ImageDataset
+from dataclasses import dataclass, asdict
+
+@dataclass
+class TrainConfig:
+    checkpoint_save_path: str
+    model_save_path: str
+    model_type: str
+    use_hebb: bool
+    epochs: int = 100
+    batch_size: int = 8
+    lr: float = 0.001
+    patience: int = 10
+    lr_patience: int = 3
+    lr_factor: float=0.5
+    min_lr: float=1e-6
 
 
-def train(model, dataset_dir, class_names, device, checkpoint_path, final_model_path, epochs=100, lr=0.001, patience=10, lr_patience=3, factor=0.5, min_lr=1e-6, batch_size = 8):
+def train(model, config: TrainConfig, dataset_dir):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    optimizer = Adam(model.parameters(), lr=lr)
+    optimizer = Adam(model.parameters(), lr=config.lr)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=config.lr_patience, factor=config.lr_factor, min_lr=config.min_lr)
     criterion = torch.nn.CrossEntropyLoss()
-
-    # Learning rate scheduler: Reduce LR if test loss doesn’t improve
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=lr_patience, factor=factor, min_lr=min_lr, verbose=True)
 
     train_history = []
     test_history = []
@@ -23,19 +37,19 @@ def train(model, dataset_dir, class_names, device, checkpoint_path, final_model_
     patience_counter = 0  # Tracks epochs without improvement
     use_hebb = hasattr(model, "mlp")
 
-    file_paths, labels = read_dataset_dir(dataset_dir)
+    file_paths, labels, class_names = read_dataset_dir(dataset_dir)
     numbered_labels = [class_names.index(label) for label in labels]
     dataset = ImageDataset(file_paths, numbered_labels)        
     train_size = int(0.75 * len(dataset))
     test_size = len(dataset) - train_size
     train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
     
-    for epoch in range(epochs):
+    for epoch in range(config.epochs):
         running_loss = 0.0
-        model.train()  # Ensure model is in training mode
-        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}"):
+        model.train()
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{config.epochs}"):
             images = batch["image"].to(device)
             labels = batch["label"].to(device)
             optimizer.zero_grad()
@@ -69,20 +83,19 @@ def train(model, dataset_dir, class_names, device, checkpoint_path, final_model_
             # Early Stopping Check
             if avg_test_loss < best_loss:
                 best_loss = avg_test_loss
-                patience_counter = 0  # Reset patience
-                # Save the best model
-                torch.save(model.state_dict(), checkpoint_path)
-                print(f"Best model saved: {checkpoint_path}")
+                patience_counter = 0 
+                torch.save({"model_state": model.state_dict(), "config": asdict(config)}, config.checkpoint_save_path)
+                print(f"Best model saved: {config.checkpoint_save_path}")
             else:
                 patience_counter += 1
-                print(f"Early stopping patience: {patience_counter}/{patience}")
+                print(f"Early stopping patience: {patience_counter}/{config.patience}")
 
-            if patience_counter >= patience:
+            if patience_counter >= config.patience:
                 print("Early stopping triggered! Training stopped.")
                 break
     
-    torch.save(model.state_dict(), final_model_path)
-    print(f"Final model saved: {final_model_path}")
+    torch.save(model.state_dict(), config.model_save_path)
+    print(f"Final model saved: {config.model_save_path}")
     return train_history, test_history, test_acc_history
 
 
@@ -115,8 +128,8 @@ def evaluate(model, data_loader):
     return avg_loss, accuracy
 
 
-def validate(model, dataset_dir, class_names):
-    file_paths, labels = read_dataset_dir(dataset_dir)
+def validate(model, dataset_dir):
+    file_paths, labels, class_names = read_dataset_dir(dataset_dir)
     numbered_labels = [class_names.index(label) for label in labels]
     dataset = ImageDataset(file_paths, numbered_labels)        
     loader = DataLoader(dataset, batch_size=1, shuffle=False)
