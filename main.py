@@ -42,7 +42,7 @@ def main():
     
     args = parser.parse_args()
 
-    class_names = os.listdir(args.data)
+    class_names = sorted(os.listdir(args.data))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if args.model_type == "resnet":

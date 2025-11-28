@@ -6,7 +6,7 @@ def read_dataset_dir(dataset_dir):
 
     file_paths = []
     labels = []
-    class_names = os.listdir(dataset_dir)
+    class_names = sorted(os.listdir(dataset_dir))
 
     for class_name in class_names:
         class_dir = os.path.join(dataset_dir, class_name) 
