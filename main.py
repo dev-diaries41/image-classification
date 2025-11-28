@@ -4,13 +4,11 @@ import os
 import torch
 import numpy as np
 import random
-from torch.utils.data import DataLoader, random_split
 from model import ImageClassifier, ImageClassifierWithMLP
-from data import Dataset
-from train import train
+from train import train, validate
 from plot import plot_results
 from inference import inference
-from utils import read_dataset_dir, load_class_names, get_new_filename
+from utils import load_class_names, get_new_filename
 
 def seed_all(seed=42):
     random.seed(seed)
@@ -31,33 +29,23 @@ def main():
     subparsers = parser.add_subparsers(dest='mode')
 
     train_parser = subparsers.add_parser("train", parents=[common_parent])
-    train_parser.add_argument("-d", "--dataset", type=str, help="Directory with training data")
+    train_parser.add_argument("-d", "--data", type=str, required=True, help="Directory with training data")
     train_parser.add_argument("-e", "--epochs", type=int, default=100, help="Number of training epochs")
     train_parser.add_argument("-b", "--batch-size", type=int, default=8, help="Batch size for training")
     train_parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
 
     infer_parser = subparsers.add_parser("infer", parents=[common_parent])
-    infer_parser.add_argument("-m","--model", type=str, default="", help="Path to model to use for inference")
-    infer_parser.add_argument("-i", "--input", type=str, help="Image file for inference")
+    infer_parser.add_argument("-m","--model", required=True, type=str, default="", help="Path to model to use for inference")
+    infer_parser.add_argument("-i", "--input-image", required=True, type=str, help="Image file for inference")
 
+    val_parser = subparsers.add_parser('validation')
+    val_parser.add_argument("-d", "--data", required=True, type=str, help="Directory with training data")
+    val_parser.add_argument('--ckpt', required=True, help='Path to saved checkpoint')
+    
     args = parser.parse_args()
 
     class_names = load_class_names(args.class_names)
-
-    if args.mode == "train":
-        if not args.dataset:
-            raise ValueError("For training, please provide dataset with --dataset")
-        
-    if args.mode == "inference":
-        if not args.model or not args.input:
-            raise ValueError("For inference, please provide model path with --model and input image with --input")
-        if not os.path.exists(args.model):
-            raise ValueError("The model path you provided does not exist.")
-        if not os.path.exists(args.input):
-            raise ValueError("The input image you provided does not exist.")
-    
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
 
     if args.model_type == "resnet":
         model = ImageClassifierWithMLP(num_classes=len(class_names)) if args.use_hebb else ImageClassifier(num_classes=len(class_names), architecture="resnet")
@@ -66,38 +54,33 @@ def main():
     else:
         raise ValueError("The model_type provided is invalid. Choose between 'resnet' or 'mobilenet'")
 
-
+    # TODO: Change classnames to dict
     if args.mode == "train":
-        file_paths, labels = read_dataset_dir(args.dataset)
-        numbered_labels = [class_names.index(label) for label in labels]
-        dataset = Dataset(file_paths, numbered_labels)
-
-        print("Training model...")
-        print(f"Dataset size: ", len(numbered_labels))
-        
-        train_size = int(0.75 * len(dataset))
-        test_size = len(dataset) - train_size
-        train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-        test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
-
         hebb_prefix = "hebb" if args.use_hebb else ""
         checkpoint_path = get_new_filename("checkpoints", f"checkpoint_best_{args.model_type}_{hebb_prefix}", ".pt")
         final_model_path = get_new_filename("models", f"model_{args.model_type}_{hebb_prefix}", ".pt")
 
         train_losses, test_losses, test_acc = train(
-            model=model, train_loader=train_loader, device=device, checkpoint_path=checkpoint_path, final_model_path=final_model_path, epochs=args.epochs, lr=args.lr,
-              test_loader=test_loader
+            model=model, 
+            dataset_dir=args.data,
+            class_names=class_names,
+            device=device, checkpoint_path=checkpoint_path, 
+            final_model_path=final_model_path, 
+            epochs=args.epochs, lr=args.lr,
         )
         plot_path = get_new_filename("results", f"loss_accuracy_plot_{args.model_type}_{hebb_prefix}", ".png")
         plot_results(train_losses, test_losses, test_acc, output_path=plot_path)
-    elif args.mode == "inference":
+    elif args.mode == "infer":
         print("Preparing inference...")
         print("Loading model...")
         model.load_state_dict(torch.load(args.model, map_location=device))
-        sample_image = args.input
+        sample_image = args.input_image
         prediction = inference(model, device, sample_image, class_names)
         print(f"Predicted class for the image '{sample_image}': {prediction}")
+    elif args.mode == 'validation':
+            model.load_state_dict(torch.load(args.ckpt, map_location=device))
+            loss, accuracy = validate(model, args.data, class_names)
+            print(f" Validation Loss: {loss:.4f}, Validation Accuracy: {accuracy:.4f}")
 
 if __name__ == "__main__":
     main()
