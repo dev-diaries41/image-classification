@@ -1,30 +1,44 @@
 #! /usr/bin/env python3
+import argparse
 import os
 import torch
+import numpy as np
+import random
 from torch.utils.data import DataLoader, random_split
 from model import ImageClassifier, ImageClassifierMobile, ImageClassifierWithMLP
 from data import Dataset
 from train import train
 from plot import plot_results
 from inference import inference
-from utils import read_dataset_dir, load_class_names
-import argparse
+from utils import read_dataset_dir, load_class_names, get_new_filename
+
+def seed_all(seed=42):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+seed_all(42)
 
 def main():
     parser = argparse.ArgumentParser(description="Image classification pipeline")
-    parser.add_argument("--mode", type=str, choices=["train", "inference"], required=True,
-                        help="Choose 'train' to train the model or 'inference' to run enhancement on an image file")
-    parser.add_argument("--class-names", type=str, required=True, help="Path to a text file with class names")
-    parser.add_argument("-t", "--model_type", type=str, default="resnet",choices=["resnet", "mobilenet"],  help="Type of model to use")
-    parser.add_argument("-d", "--dataset", type=str, help="Directory with training data")
-    parser.add_argument("-i", "--input", type=str, help="Image file for inference")
-    parser.add_argument("-e", "--epochs", type=int, default=100, help="Number of training epochs")
-    parser.add_argument("-b", "--batch_size", type=int, default=8, help="Batch size for training")
-    parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
-    parser.add_argument("--checkpoint", type=str, default="checkpoint/screenshot_model", 
-                        help="Filename to save/load model checkpoint")
-    parser.add_argument("-m","--model", type=str, default="", help="Path to model to use for inference")
-    parser.add_argument("--plot_file", type=str, default="results/loss_accuracy_plot.png", help="Filename for saving the loss plot")
+    common_parent = argparse.ArgumentParser(add_help=False)
+    common_parent.add_argument("--class-names", type=str, required=True, help="Path to a text file with class names")
+    common_parent.add_argument("-t", "--model-type", type=str, required=True, choices=["resnet", "mobilenet"],  help="Type of model to use")
+    subparsers = parser.add_subparsers(dest='mode')
+
+    train_parser = subparsers.add_parser("train", parents=[common_parent])
+    train_parser.add_argument("-d", "--dataset", type=str, help="Directory with training data")
+    train_parser.add_argument("-e", "--epochs", type=int, default=100, help="Number of training epochs")
+    train_parser.add_argument("-b", "--batch-size", type=int, default=8, help="Batch size for training")
+    train_parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
+
+    infer_parser = subparsers.add_parser("infer", parents=[common_parent])
+    infer_parser.add_argument("-m","--model", type=str, default="", help="Path to model to use for inference")
+    infer_parser.add_argument("-i", "--input", type=str, help="Image file for inference")
+
     args = parser.parse_args()
 
     class_names = load_class_names(args.class_names)
@@ -66,11 +80,15 @@ def main():
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
         test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
 
+        checkpoint_path = get_new_filename("checkpoints", f"checkpoint_best_{args.model_type}_", ".pt")
+        final_model_path = get_new_filename("models", f"model_{args.model_type}_", ".pt")
+
         train_losses, test_losses, test_acc = train(
-            model=model, train_loader=train_loader, device=device, checkpoint_path=args.checkpoint, epochs=args.epochs, lr=args.lr,
+            model=model, train_loader=train_loader, device=device, checkpoint_path=checkpoint_path, final_model_path=final_model_path, epochs=args.epochs, lr=args.lr,
               test_loader=test_loader
         )
-        plot_results(train_losses, test_losses, test_acc, output_path=args.plot_file)
+        plot_path = get_new_filename("results", f"loss_accuracy_plot_{args.model_type}_", ".png")
+        plot_results(train_losses, test_losses, test_acc, output_path=plot_path)
     elif args.mode == "inference":
         print("Preparing inference...")
         print("Loading model...")

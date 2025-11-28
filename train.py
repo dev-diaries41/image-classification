@@ -2,7 +2,6 @@ import torch
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
-import os
 
 def evaluate(model, data_loader, device, criterion):
     model.eval()
@@ -29,7 +28,7 @@ def evaluate(model, data_loader, device, criterion):
     model.train()  # Switch back to training mode
     return avg_loss, accuracy
 
-def train(model, train_loader, device, checkpoint_path, epochs=100, lr=0.001, test_loader=None, patience=10, lr_patience=3, factor=0.5, min_lr=1e-6):
+def train(model, train_loader, device, checkpoint_path, final_model_path, epochs=100, lr=0.001, test_loader=None, patience=10, lr_patience=3, factor=0.5, min_lr=1e-6):
     model.to(device)
     optimizer = Adam(model.parameters(), lr=lr)
     criterion = torch.nn.CrossEntropyLoss()
@@ -44,7 +43,7 @@ def train(model, train_loader, device, checkpoint_path, epochs=100, lr=0.001, te
     best_loss = float("inf")
     patience_counter = 0  # Tracks epochs without improvement
     use_hebb = hasattr(model, "mlp")
-
+    
     for epoch in range(epochs):
         running_loss = 0.0
         model.train()  # Ensure model is in training mode
@@ -84,10 +83,8 @@ def train(model, train_loader, device, checkpoint_path, epochs=100, lr=0.001, te
                 best_loss = avg_test_loss
                 patience_counter = 0  # Reset patience
                 # Save the best model
-                os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
-                best_checkpoint_file = f"{checkpoint_path}_best.pt"
-                torch.save(model.state_dict(), best_checkpoint_file)
-                print(f"Best model saved: {best_checkpoint_file}")
+                torch.save(model.state_dict(), checkpoint_path)
+                print(f"Best model saved: {checkpoint_path}")
             else:
                 patience_counter += 1
                 print(f"Early stopping patience: {patience_counter}/{patience}")
@@ -95,12 +92,7 @@ def train(model, train_loader, device, checkpoint_path, epochs=100, lr=0.001, te
             if patience_counter >= patience:
                 print("Early stopping triggered! Training stopped.")
                 break
-
-    filename = os.path.basename(checkpoint_path) 
     
-    final_model = os.path.join("models", filename + ".pt")
-    os.makedirs(os.path.dirname(final_model), exist_ok=True)   
-    torch.save(model.state_dict(), final_model)
-    print(f"Final model saved: {final_model}")
-
+    torch.save(model.state_dict(), final_model_path)
+    print(f"Final model saved: {final_model_path}")
     return train_history, test_history, test_acc_history
