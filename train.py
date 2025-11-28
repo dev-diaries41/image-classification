@@ -9,14 +9,19 @@ def evaluate(model, data_loader, device, criterion):
     total_loss = 0.0
     correct = 0
     total = 0
+    use_hebb = hasattr(model, "mlp")
+
     with torch.no_grad():
         for batch in data_loader:
             images = batch["image"].to(device)
             labels = batch["label"].to(device)
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+            if use_hebb:
+                y_pred, _ = model(images, return_activations = False)
+            else:
+                 y_pred = model(images)
+            loss = criterion(y_pred, labels)
             total_loss += loss.item()
-            preds = outputs.argmax(dim=1)
+            preds = y_pred.argmax(dim=1)
             correct += (preds == labels).sum().item()
             total += labels.size(0)
     avg_loss = total_loss / len(data_loader)
@@ -38,6 +43,7 @@ def train(model, train_loader, device, checkpoint_path, epochs=100, lr=0.001, te
 
     best_loss = float("inf")
     patience_counter = 0  # Tracks epochs without improvement
+    use_hebb = hasattr(model, "mlp")
 
     for epoch in range(epochs):
         running_loss = 0.0
@@ -46,9 +52,16 @@ def train(model, train_loader, device, checkpoint_path, epochs=100, lr=0.001, te
             images = batch["image"].to(device)
             labels = batch["label"].to(device)
             optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+            if use_hebb:
+                y_pred, acts = model(images, return_activations = True)
+            else:
+                 y_pred = model(images)
+            loss = criterion(y_pred, labels)
             loss.backward()
+            
+            if use_hebb and (epoch % 2 == 0):
+                    model.mlp.apply_hebb(acts, y_true = labels, y_pred = y_pred, gate_threshold = 0.5)
+
             optimizer.step()
             running_loss += loss.item()
         
