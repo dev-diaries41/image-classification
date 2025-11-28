@@ -56,7 +56,7 @@ def main():
 
     # TODO: Change classnames to dict
     if args.mode == "train":
-        hebb_prefix = "hebb" if args.use_hebb else ""
+        hebb_prefix = "hebb_" if args.use_hebb else ""
         checkpoint_path = get_new_filename("checkpoints", f"checkpoint_best_{args.model_type}_{hebb_prefix}", ".pt")
         final_model_path = get_new_filename("models", f"model_{args.model_type}_{hebb_prefix}", ".pt")
 
