@@ -14,7 +14,7 @@ def main():
     parser = argparse.ArgumentParser(description="Image classification pipeline")
     parser.add_argument("--mode", type=str, choices=["train", "inference"], required=True,
                         help="Choose 'train' to train the model or 'inference' to run enhancement on an image file")
-    parser.add_argument("--class_names", type=str, required=True, help="Path to a text file with class names")
+    parser.add_argument("--class-names", type=str, required=True, help="Path to a text file with class names")
     parser.add_argument("-t", "--model_type", type=str, default="resnet",choices=["resnet", "mobilenet"],  help="Type of model to use")
     parser.add_argument("-d", "--dataset", type=str, help="Directory with training data")
     parser.add_argument("-i", "--input", type=str, help="Image file for inference")
