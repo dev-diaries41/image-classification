@@ -2,6 +2,9 @@ import torch
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
+from torch.utils.data import DataLoader, random_split
+from utils import read_dataset_dir
+from data import ImageDataset
 
 def evaluate(model, data_loader, device, criterion):
     model.eval()
@@ -28,7 +31,7 @@ def evaluate(model, data_loader, device, criterion):
     model.train()  # Switch back to training mode
     return avg_loss, accuracy
 
-def train(model, train_loader, device, checkpoint_path, final_model_path, epochs=100, lr=0.001, test_loader=None, patience=10, lr_patience=3, factor=0.5, min_lr=1e-6):
+def train(model, dataset_dir, class_names, device, checkpoint_path, final_model_path, epochs=100, lr=0.001, patience=10, lr_patience=3, factor=0.5, min_lr=1e-6, batch_size = 8):
     model.to(device)
     optimizer = Adam(model.parameters(), lr=lr)
     criterion = torch.nn.CrossEntropyLoss()
@@ -43,6 +46,16 @@ def train(model, train_loader, device, checkpoint_path, final_model_path, epochs
     best_loss = float("inf")
     patience_counter = 0  # Tracks epochs without improvement
     use_hebb = hasattr(model, "mlp")
+
+    file_paths, labels = read_dataset_dir(dataset_dir)
+    numbered_labels = [class_names.index(label) for label in labels]
+    dataset = ImageDataset(file_paths, numbered_labels)        
+    train_size = int(0.75 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+
     
     for epoch in range(epochs):
         running_loss = 0.0
