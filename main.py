@@ -2,7 +2,7 @@
 import os
 import torch
 from torch.utils.data import DataLoader, random_split
-from model import ImageClassifier, ImageClassifierMobile
+from model import ImageClassifier, ImageClassifierMobile, ImageClassifierWithMLP
 from data import Dataset
 from train import train
 from plot import plot_results
@@ -45,9 +45,9 @@ def main():
     print(f"Using device: {device}")
 
     if args.model_type == "resnet":
-        model = ImageClassifier(num_classes=len(class_names))
+        model = ImageClassifierWithMLP(num_classes=len(class_names))
     elif args.model_type == "mobilenet":
-        model = ImageClassifierMobile(num_classes=len(class_names))
+        model = ImageClassifierWithMLP(num_classes=len(class_names), backbone="mobilenet")
     else:
         raise ValueError("The model_type provided is invalid. Choose between 'resnet' or 'mobilenet'")
 
