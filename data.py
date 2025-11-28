@@ -1,10 +1,9 @@
 # data.py
-import os
 from PIL import Image
 from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 
-class Dataset(Dataset):
+class ImageDataset(Dataset):
     def __init__(self, image_paths, labels, transform=None):
         """
         image_paths: List of file paths to the screenshot images.
