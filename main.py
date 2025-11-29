@@ -45,13 +45,6 @@ def main():
     class_names = sorted(os.listdir(args.data))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    if args.model_type == "resnet":
-        model = ImageClassifierWithMLP(num_classes=len(class_names)) if args.use_hebb else ImageClassifier(num_classes=len(class_names), architecture="resnet")
-    elif args.model_type == "mobilenet":
-        model = ImageClassifierWithMLP(num_classes=len(class_names), backbone="mobilenet") if args.use_hebb else ImageClassifier(num_classes=len(class_names), architecture="mobilenet")
-    else:
-        raise ValueError("The model_type provided is invalid. Choose between 'resnet' or 'mobilenet'")
-
     # TODO: Change classnames to dict
     if args.mode == "train":
         hebb_prefix = "hebb_" if args.use_hebb else ""
@@ -67,19 +60,38 @@ def main():
             batch_size=args.batch_size,
             lr=args.lr,
             )
+        
+        if args.use_hebb:
+            model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=args.model_type)
+        else:
+            model =  ImageClassifier(num_classes=len(class_names), architecture=args.model_type)
+       
         train_losses, test_losses, test_acc = train(model, config, args.data)
         plot_path = get_new_filename("results", f"loss_accuracy_plot_{args.model_type}_{hebb_prefix}", ".png")
         plot_results(train_losses, test_losses, test_acc, output_path=plot_path)
     elif args.mode == "infer":
-        print("Preparing inference...")
-        print("Loading model...")
-        model.load_state_dict(torch.load(args.model, map_location=device))
+        print("Running inference...")
+        ckpt = torch.load(args.model, map_location=device, weights_only=False)
+        config = TrainConfig(**ckpt['config'])
+
+        if config.use_hebb:
+            model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=config.model_type)
+        else:
+            model =  ImageClassifier(num_classes=len(class_names), architecture=config.model_type)
+       
         sample_image = args.input_image
         prediction = inference(model, device, sample_image, class_names)
         print(f"Predicted class for the image '{sample_image}': {prediction}")
     elif args.mode == 'validation':
-            model.load_state_dict(torch.load(args.ckpt, map_location=device))
-            loss, accuracy = validate(model, args.data, class_names)
+            print("Running validation...")
+            ckpt = torch.load(args.ckpt, map_location=device, weights_only=False)
+            config = TrainConfig(**ckpt['config'])
+
+            if config.use_hebb:
+                model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=config.model_type)
+            else:
+                model = ImageClassifier(num_classes=len(class_names), architecture=config.model_type)
+            loss, accuracy = validate(model, args.data)
             print(f" Validation Loss: {loss:.4f}, Validation Accuracy: {accuracy:.4f}")
 
 if __name__ == "__main__":
