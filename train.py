@@ -15,8 +15,8 @@ class TrainConfig:
     use_hebb: bool
     epochs: int = 100
     batch_size: int = 8
-    lr: float = 0.001
-    patience: int = 10
+    lr: float = 0.0001
+    patience: int = 20
     lr_patience: int = 3
     lr_factor: float=0.5
     min_lr: float=1e-6
@@ -60,8 +60,8 @@ def train(model, config: TrainConfig, dataset_dir):
             loss = criterion(y_pred, labels)
             loss.backward()
             
-            if use_hebb and (epoch % 2 == 0):
-                    model.mlp.apply_hebb(acts, y_true = labels, y_pred = y_pred, gate_threshold = 0.5)
+            if use_hebb:
+                model.mlp.apply_hebb(acts, y_true = labels, y_pred = y_pred)
 
             optimizer.step()
             running_loss += loss.item()
