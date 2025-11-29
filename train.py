@@ -110,10 +110,7 @@ def evaluate(model, data_loader):
         for batch in data_loader:
             images = batch["image"].to(device)
             labels = batch["label"].to(device)
-            if use_hebb:
-                y_pred, _ = model(images, return_activations = False)
-            else:
-                 y_pred = model(images)
+            y_pred = model(images)
             loss = criterion(y_pred, labels)
             total_loss += loss.item()
             preds = y_pred.argmax(dim=1)
