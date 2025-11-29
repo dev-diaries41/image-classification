@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader, random_split
 from utils import read_dataset_dir
 from data import ImageDataset
 from dataclasses import dataclass, asdict
+import numpy as np
 
 @dataclass
 class TrainConfig:
@@ -60,8 +61,8 @@ def train(model, config: TrainConfig, dataset_dir):
             loss = criterion(y_pred, labels)
             loss.backward()
             
-            if use_hebb:
-                model.mlp.apply_hebb(acts, y_true = labels, y_pred = y_pred)
+            if use_hebb and epoch > 1:
+                model.mlp.apply_hebb(acts, loss = loss.item(), avg_loss = np.mean(train_history[-5:] if len(train_history) >= 1 else 1))
 
             optimizer.step()
             running_loss += loss.item()
