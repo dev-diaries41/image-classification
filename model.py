@@ -54,21 +54,25 @@ class ImageClassifierWithMLP(nn.Module):
         features = self.backbone(x)
         return self.mlp(features, return_activations=return_activations)
     
-
+    
     def gate_fn(self, module, x, y_true, y_pred):
-        num_classes = y_pred.shape[1]
+        # Convert logits to probabilities
+        probs = F.softmax(y_pred, dim=1)
+
+        # Compute per-neuron error using one-hot labels
+        num_classes = probs.shape[1]
         y_true_onehot = F.one_hot(y_true, num_classes=num_classes).float()
-        err = torch.mean(torch.abs(y_true_onehot - y_pred), dim=0)
+        err = torch.mean(torch.abs(y_true_onehot - probs), dim=0)  # shape: (out_features,)
 
         # Per-neuron input activation norm
         act_norm = x.norm(dim=1)  # shape: (batch,)
         act_norm = act_norm.unsqueeze(1).expand(-1, module.W_prox.shape[0])
         act_norm = act_norm.mean(dim=0) 
-        act_norm_scaled = act_norm / module.W_prox.shape[1]
-        err_gate = torch.sigmoid(self.alpha_sharpness * err)
-        act_gate = torch.sigmoid(self.alpha_sharpness * act_norm_scaled)
-        return err_gate * act_gate
 
+        # Inverted error gate: low error → strong update
+        err_gate = 1.0 - torch.sigmoid(self.alpha_sharpness * err)
+        act_gate = torch.sigmoid(self.alpha_sharpness * act_norm)
+        return err_gate
 
 
 class HebbianNeuron(nn.Module):
@@ -181,8 +185,8 @@ class HebbianNeuron(nn.Module):
             # Optional: send to TensorBoard
             # self.tb_writer.add_histogram(f'hebb/gate_layer_{i}', hist, global_step)
 
-        if mean_gate < self.gate_threshold:
-            return
+        # if mean_gate < self.gate_threshold:
+        #     return
 
         # Apply Hebbian trace scaled by alpha and gate (works with scalar or per-neuron gate)
         self.W_dist.add_(gate * self.alpha_hebb * self.E)
