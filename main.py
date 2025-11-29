@@ -82,7 +82,7 @@ def main():
             model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=config.model_type)
         else:
             model =  ImageClassifier(num_classes=len(class_names), architecture=config.model_type)
-       
+        model.load_state_dict(ckpt['model_state'])
         sample_image = args.input_image
         prediction = inference(model, device, sample_image, class_names)
         print(f"Predicted class for the image '{sample_image}': {prediction}")
@@ -95,6 +95,8 @@ def main():
                 model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=config.model_type)
             else:
                 model = ImageClassifier(num_classes=len(class_names), architecture=config.model_type)
+            
+            model.load_state_dict(ckpt['model_state'])
             loss, accuracy = validate(model, args.data)
             print(f" Validation Loss: {loss:.4f}, Validation Accuracy: {accuracy:.4f}")
 
