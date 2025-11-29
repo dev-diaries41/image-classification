@@ -147,7 +147,7 @@ class HebbianNeuron(nn.Module):
         return out
 
     @torch.no_grad()
-    def local_hebb_update(self, pre_act, post_act, y_true=None, y_pred=None):
+    def local_hebb_update(self, pre_act, post_act, y_true, y_pred):
         """
         pre_act: (batch, in_features)
         post_act: (batch, out_features)
@@ -222,7 +222,7 @@ class HebbianMLP(nn.Module):
         return (out, activations) if return_activations else (out, None)
     
 
-    def apply_hebb(self, acts, y_true=None, y_pred=None, gate_threshold=0.2, log_gates=False):
+    def apply_hebb(self, acts, y_true, y_pred, gate_threshold=0.2, log_gates=False):
         """
         Apply Hebbian updates using activations collected from a forward pass.
         Optionally logs per-layer gate histograms.
