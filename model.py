@@ -47,7 +47,6 @@ class ImageClassifierWithMLP(nn.Module):
         else:
             raise ValueError("Backbone not supported")
         
-        # Hebbian MLP
         self.mlp = HebbianMLP(layer_sizes=[in_features, mlp_hidden, num_classes], gate_fn=self.gate_fn)
         self.alpha_sharpness = alpha_sharpness
         
@@ -56,26 +55,19 @@ class ImageClassifierWithMLP(nn.Module):
         return self.mlp(features, return_activations=return_activations)
     
 
-    def gate_fn(self, module, x=None, y_true=None, y_pred=None):
-        # Convert y_true to one-hot if provided
-        if y_true is None or y_pred is None:
-            err = torch.ones(module.W_prox.shape[0], device=module.W_prox.device, dtype=module.W_prox.dtype)
-        else:
-            num_classes = y_pred.shape[1]
-            y_true_onehot = F.one_hot(y_true, num_classes=num_classes).float()
-            # Compute per-output-unit error
-            err = torch.mean(torch.abs(y_true_onehot - y_pred), dim=0)  # shape: (out_features,)
+    def gate_fn(self, module, x, y_true, y_pred):
+        num_classes = y_pred.shape[1]
+        y_true_onehot = F.one_hot(y_true, num_classes=num_classes).float()
+        err = torch.mean(torch.abs(y_true_onehot - y_pred), dim=0)
 
         # Per-neuron input activation norm
         act_norm = x.norm(dim=1)  # shape: (batch,)
-        act_norm = act_norm.unsqueeze(1).expand(-1, module.W_prox.shape[0])  # shape: (batch, out_features)
-        act_norm = act_norm.mean(dim=0)  # shape: (out_features,)
+        act_norm = act_norm.unsqueeze(1).expand(-1, module.W_prox.shape[0])
+        act_norm = act_norm.mean(dim=0) 
 
-        # Gate scaling with sigmoid
         err_gate = torch.sigmoid(self.alpha_sharpness * err)
         act_gate = torch.sigmoid(self.alpha_sharpness * act_norm)
-
-        return err_gate * act_gate  # shape: (out_features,)
+        return err_gate * act_gate
 
 
 
@@ -128,7 +120,7 @@ class HebbianNeuron(nn.Module):
         fan_in, _ = nn.init._calculate_fan_in_and_fan_out(self.W_prox)
         bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0.0
         nn.init.uniform_(self.bias, -bound, bound)
-        nn.init.normal_(self.W_dist, mean=0.0, std=1e-3)   # or nn.init.zeros_(self.W_dist)        
+        nn.init.normal_(self.W_dist, mean=0.0, std=1e-3)
         nn.init.zeros_(self.E)
 
     def forward(self, x, return_activations=False):
@@ -166,7 +158,6 @@ class HebbianNeuron(nn.Module):
             
 
         gate = self.gate_fn(self, x=pre_act, y_true=y_true, y_pred=y_pred)
-        # ----- SAFE gate handling (no float(...) which can move tensors to CPU) -----
         # Normalize gate into a tensor on the correct device/dtype for in-place ops.
         if isinstance(gate, torch.Tensor):
             # ensure same device and dtype as weights/traces
