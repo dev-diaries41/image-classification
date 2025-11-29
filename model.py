@@ -34,9 +34,9 @@ class ImageClassifier(nn.Module):
     
 
 class ImageClassifierWithMLP(nn.Module):
-    def __init__(self, num_classes, backbone='resnet18', mlp_hidden=256, alpha_sharpness = 10):
+    def __init__(self, num_classes, backbone='resnet', mlp_hidden=256, alpha_sharpness = 10):
         super().__init__()
-        if backbone == 'resnet18':
+        if backbone == 'resnet':
             self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
             in_features = self.backbone.fc.in_features
             self.backbone.fc = nn.Identity()  # remove final fc
