@@ -2,35 +2,33 @@ import torch
 from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
-import os
+from torch.utils.data import DataLoader, random_split
+from utils import read_dataset_dir
+from data import ImageDataset
+from dataclasses import dataclass, asdict
+import numpy as np
 
-def evaluate(model, data_loader, device, criterion):
-    model.eval()
-    total_loss = 0.0
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for batch in data_loader:
-            images = batch["image"].to(device)
-            labels = batch["label"].to(device)
-            outputs = model(images)
-            loss = criterion(outputs, labels)
-            total_loss += loss.item()
-            preds = outputs.argmax(dim=1)
-            correct += (preds == labels).sum().item()
-            total += labels.size(0)
-    avg_loss = total_loss / len(data_loader)
-    accuracy = correct / total if total > 0 else 0
-    model.train()  # Switch back to training mode
-    return avg_loss, accuracy
+@dataclass
+class TrainConfig:
+    checkpoint_save_path: str
+    model_save_path: str
+    model_type: str
+    use_hebb: bool
+    epochs: int = 100
+    batch_size: int = 8
+    lr: float = 0.0001
+    patience: int = 20
+    lr_patience: int = 3
+    lr_factor: float=0.5
+    min_lr: float=1e-6
 
-def train(model, train_loader, device, checkpoint_path, epochs=100, lr=0.001, test_loader=None, patience=10, lr_patience=3, factor=0.5, min_lr=1e-6):
+
+def train(model, config: TrainConfig, dataset_dir):
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    optimizer = Adam(model.parameters(), lr=lr)
+    optimizer = Adam(model.parameters(), lr=config.lr)
+    scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=config.lr_patience, factor=config.lr_factor, min_lr=config.min_lr)
     criterion = torch.nn.CrossEntropyLoss()
-
-    # Learning rate scheduler: Reduce LR if test loss doesn’t improve
-    scheduler = ReduceLROnPlateau(optimizer, mode='min', patience=lr_patience, factor=factor, min_lr=min_lr, verbose=True)
 
     train_history = []
     test_history = []
@@ -38,56 +36,99 @@ def train(model, train_loader, device, checkpoint_path, epochs=100, lr=0.001, te
 
     best_loss = float("inf")
     patience_counter = 0  # Tracks epochs without improvement
+    use_hebb = hasattr(model, "mlp")
 
-    for epoch in range(epochs):
+    file_paths, labels, class_names = read_dataset_dir(dataset_dir)
+    numbered_labels = [class_names.index(label) for label in labels]
+    dataset = ImageDataset(file_paths, numbered_labels)        
+    train_size = int(0.75 * len(dataset))
+    test_size = len(dataset) - train_size
+    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
+    
+    for epoch in range(config.epochs):
         running_loss = 0.0
-        model.train()  # Ensure model is in training mode
-        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs}"):
+        model.train()
+        for batch in tqdm(train_loader, desc=f"Epoch {epoch+1}/{config.epochs}"):
             images = batch["image"].to(device)
             labels = batch["label"].to(device)
             optimizer.zero_grad()
-            outputs = model(images)
-            loss = criterion(outputs, labels)
+            if use_hebb:
+                y_pred, acts = model(images, return_activations = True)
+            else:
+                 y_pred = model(images)
+            loss = criterion(y_pred, labels)
             loss.backward()
+            
+            if use_hebb and epoch > 1:
+                model.mlp.apply_hebb(acts, loss = loss.item(), avg_loss = np.mean(train_history[-5:] if len(train_history) >= 1 else 1))
+
             optimizer.step()
             running_loss += loss.item()
         
         avg_train_loss = running_loss / len(train_loader)
         train_history.append(avg_train_loss)
-        print(f"Epoch {epoch+1} Training Loss: {avg_train_loss:.4f}")
 
-        # Evaluate on test set if provided
-        if test_loader:
-            avg_test_loss, test_accuracy = evaluate(model, test_loader, device, criterion)
-            test_history.append(avg_test_loss)
-            test_acc_history.append(test_accuracy)
-            print(f"Epoch {epoch+1} Test Loss: {avg_test_loss:.4f}, Test Accuracy: {test_accuracy:.4f}")
+        avg_test_loss, test_accuracy = evaluate(model, test_loader)
+        test_history.append(avg_test_loss)
+        test_acc_history.append(test_accuracy)
+        print(f"Epoch {epoch+1} | Training Loss: {avg_train_loss:.4f} | Test Loss: {avg_test_loss:.4f} | Test Accuracy: {test_accuracy:.4f}")
 
-            # Adjust learning rate if test loss plateaus
-            scheduler.step(avg_test_loss)
+        scheduler.step(avg_test_loss)
 
-            # Early Stopping Check
-            if avg_test_loss < best_loss:
-                best_loss = avg_test_loss
-                patience_counter = 0  # Reset patience
-                # Save the best model
-                os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
-                best_checkpoint_file = f"{checkpoint_path}_best.pt"
-                torch.save(model.state_dict(), best_checkpoint_file)
-                print(f"Best model saved: {best_checkpoint_file}")
-            else:
-                patience_counter += 1
-                print(f"Early stopping patience: {patience_counter}/{patience}")
+        # Early Stopping Check
+        if avg_test_loss < best_loss:
+            best_loss = avg_test_loss
+            patience_counter = 0 
+            torch.save({"model_state": model.state_dict(), "config": asdict(config)}, config.checkpoint_save_path)
+            print(f"Best model saved: {config.checkpoint_save_path}")
+        else:
+            patience_counter += 1
+            print(f"Early stopping patience: {patience_counter}/{config.patience}")
 
-            if patience_counter >= patience:
-                print("Early stopping triggered! Training stopped.")
-                break
-
-    filename = os.path.basename(checkpoint_path) 
+        if patience_counter >= config.patience:
+            print("Early stopping triggered! Training stopped.")
+            break
     
-    final_model = os.path.join("models", filename + ".pt")
-    os.makedirs(os.path.dirname(final_model), exist_ok=True)   
-    torch.save(model.state_dict(), final_model)
-    print(f"Final model saved: {final_model}")
-
+    torch.save({"model_state": model.state_dict(), "config": asdict(config)}, config.model_save_path)
+    print(f"Final model saved: {config.model_save_path}")
     return train_history, test_history, test_acc_history
+
+
+
+def evaluate(model, data_loader):
+    model.eval()
+    total_loss = 0.0
+    correct = 0
+    total = 0
+    use_hebb = hasattr(model, "mlp")
+    criterion = torch.nn.CrossEntropyLoss()
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    with torch.no_grad():
+        for batch in data_loader:
+            images = batch["image"].to(device)
+            labels = batch["label"].to(device)
+            if use_hebb:
+                y_pred, _ = model(images, return_activations = False)
+            else:
+                 y_pred = model(images)
+            loss = criterion(y_pred, labels)
+            total_loss += loss.item()
+            preds = y_pred.argmax(dim=1)
+            correct += (preds == labels).sum().item()
+            total += labels.size(0)
+    avg_loss = total_loss / len(data_loader)
+    accuracy = correct / total if total > 0 else 0
+    model.train()
+    return avg_loss, accuracy
+
+
+def validate(model, dataset_dir):
+    file_paths, labels, class_names = read_dataset_dir(dataset_dir)
+    numbered_labels = [class_names.index(label) for label in labels]
+    dataset = ImageDataset(file_paths, numbered_labels)        
+    loader = DataLoader(dataset, batch_size=1, shuffle=False)
+    return evaluate(model, loader)
+

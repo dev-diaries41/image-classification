@@ -26,14 +26,3 @@ def inference(model, device, image_path, class_names):
     predicted_index = outputs.argmax(dim=1).item()
     predicted_class = class_names[predicted_index]
     return predicted_class
-
-if __name__ == "__main__":
-    class_names = ["reddit", "twitter", "other"]
-    checkpoint_path = "checkpoint/screenshot_model_best.pt"
-    model = ImageClassifier(num_classes=len(class_names))
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using device: {device}")
-
-    input_image = input("Enter input image path: ")
-    prediction = inference(model, device, input_image, class_names)
-    print(f"Predicted class for the image '{input_image}': {prediction}")

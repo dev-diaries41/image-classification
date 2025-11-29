@@ -1,40 +1,63 @@
-# model.py
 import torch.nn as nn
 import torchvision.models as models
+import torch
+from hebbian_mlp import HebbianMLP
 
 class ImageClassifier(nn.Module):
-    def __init__(self, num_classes, weights=models.ResNet18_Weights.DEFAULT):
+    def __init__(self, num_classes, architecture='resnet', weights=None):
         """
         num_classes: Number of output classes.
-        weights: Weights of pre-trained model.
+        architecture: 'resnet' or 'mobilenet'.
+        weights: Pre-trained weights. If None, defaults will be used.
         """
         super(ImageClassifier, self).__init__()
-        # Load a pre-trained ResNet18 model
-        self.model = models.resnet18(weights=weights)
-        # Replace the final fully-connected layer to match our number of classes.
-        num_features = self.model.fc.in_features
-        self.model.fc = nn.Linear(num_features, num_classes)
-    
+
+        if architecture.lower() == 'resnet':
+            weights = weights or models.ResNet18_Weights.DEFAULT
+            self.model = models.resnet18(weights=weights)
+            num_features = self.model.fc.in_features
+            self.model.fc = nn.Linear(num_features, num_classes)
+
+        elif architecture.lower() == 'mobilenet':
+            weights = weights or models.MobileNet_V3_Large_Weights.DEFAULT
+            self.model = models.mobilenet_v3_large(weights=weights)
+            num_features = self.model.classifier[-1].in_features
+            self.model.classifier[-1] = nn.Linear(num_features, num_classes)
+
+        else:
+            raise ValueError("architecture must be 'resnet' or 'mobilenet'")
+
     def forward(self, x):
         return self.model(x)
-
-
-class ImageClassifierMobile(nn.Module):
-    def __init__(self, num_classes, weights=models.MobileNet_V3_Large_Weights.DEFAULT):
-        """
-        num_classes: Number of output classes.
-        weights: Weights of pre-trained model.
-        """
-        super(ImageClassifierMobile, self).__init__()
-        # Load a pre-trained MobileNetV3 model
-        self.model = models.mobilenet_v3_large(weights=weights)
-        # MobileNetV3's classifier is a Sequential module.
-        # Typically, it has a dropout and then a Linear layer. 
-        # Replace the last Linear layer with a new one matching our num_classes.
-        num_features = self.model.classifier[-1].in_features
-        self.model.classifier[-1] = nn.Linear(num_features, num_classes)
-
     
-    def forward(self, x):
-        return self.model(x)
 
+class ImageClassifierWithMLP(nn.Module):
+    def __init__(self, num_classes, backbone='resnet', mlp_hidden=256, alpha_sharpness = 1, gate_threshold = 0.6):
+        super().__init__()
+        if backbone == 'resnet':
+            self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
+            in_features = self.backbone.fc.in_features
+            self.backbone.fc = nn.Identity()  # remove final fc
+        elif backbone == 'mobilenet':
+            self.backbone = models.mobilenet_v3_large(weights=models.MobileNet_V3_Large_Weights.DEFAULT)
+            in_features = self.backbone.classifier[-1].in_features
+            self.backbone.classifier[-1] = nn.Identity()
+        else:
+            raise ValueError("Backbone not supported")
+        
+        self.mlp = HebbianMLP(layer_sizes=[in_features, mlp_hidden, num_classes], gate_fn=self.gate_fn, gate_threshold =gate_threshold)
+        self.alpha_sharpness = alpha_sharpness
+        
+    def forward(self, x, return_activations=False):
+        features = self.backbone(x)
+        return self.mlp(features, return_activations=return_activations)
+    
+    
+    def gate_fn(self, module, x, **kwargs):
+        loss = kwargs.get('loss', None)
+        avg_loss = kwargs.get('avg_loss', None)
+        if loss is not None and avg_loss is not None:
+            gate = torch.sigmoid(torch.tensor(loss / avg_loss, dtype=torch.float32, device=x.device))
+            return gate
+        print("Warning: loss and avg loss not passed")
+        return 1.0

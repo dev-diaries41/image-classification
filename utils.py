@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import os
 
 def read_dataset_dir(dataset_dir):
@@ -8,18 +6,43 @@ def read_dataset_dir(dataset_dir):
 
     file_paths = []
     labels = []
-    # Iterate over all items in the dataset directory
-    for class_name in os.listdir(dataset_dir):
-        class_dir = os.path.join(dataset_dir, class_name)  # Construct the full path
+    class_names = sorted(os.listdir(dataset_dir))
+
+    for class_name in class_names:
+        class_dir = os.path.join(dataset_dir, class_name) 
         if os.path.isdir(class_dir):
             class_dir_files = os.listdir(class_dir)
-            for path in class_dir_files:
-                file_paths.append(os.path.join(class_dir, path))
+            for filename in class_dir_files:
+                file_paths.append(os.path.join(class_dir, filename))
                 labels.append(class_name)
-    return file_paths, labels
+    return file_paths, labels, class_names
 
 
-def load_class_names(class_names_path):
-    with open(class_names_path, "r") as file:
-        class_names = [line.strip() for line in file.readlines()]
-    return class_names
+def get_new_dirname(dir_path: str, prefix: str):
+    os.makedirs(dir_path, exist_ok=True)
+    highest = -1
+    dirs = os.listdir(dir_path)
+    for d in dirs:
+        if not d.startswith(prefix):
+            continue
+        try:
+            n = int(d[len(prefix):])
+            highest = max(highest, n)
+        except ValueError:
+            continue
+    return os.path.join(dir_path, prefix + str(highest + 1))
+
+
+def get_new_filename(dir_path: str, prefix: str, ext):
+    os.makedirs(dir_path, exist_ok=True)
+    highest = -1
+    for f in os.listdir(dir_path):
+        if f.startswith(prefix):
+            base = os.path.splitext(f)[0]
+            try:
+                n = int(base[len(prefix):])
+                if n > highest:
+                    highest = n
+            except ValueError:
+                continue
+    return os.path.join(dir_path, f"{prefix}{highest + 1}{ext}")

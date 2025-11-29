@@ -1,6 +1,7 @@
 venv
 assets
 __pycache__
-checkpoint
+checkpoints
 models
 results
+cli.txt
