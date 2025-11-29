@@ -175,8 +175,8 @@ class HebbianNeuron(nn.Module):
             # Optional: send to TensorBoard
             # self.tb_writer.add_histogram(f'hebb/gate_layer_{i}', hist, global_step)
 
-        # if mean_gate < self.gate_threshold:
-        #     return
+        if mean_gate < self.gate_threshold:
+            return
 
         # Apply Hebbian trace scaled by alpha and gate (works with scalar or per-neuron gate)
         self.W_dist.add_(gate * self.alpha_hebb * self.E)
@@ -189,7 +189,7 @@ class HebbianNeuron(nn.Module):
 
 class HebbianMLP(nn.Module):
     def __init__(self, layer_sizes, gate_fn, gate_threshold = 0.4, alpha_hebb=1e-2, decay_dist=1e-4,
-                 trace_decay=0.85, p_dropout=0.2, last_p_dropout=0.0, hebb_start = None):
+                 trace_decay=0.9, p_dropout=0.2, last_p_dropout=0.0, hebb_start = None):
         super().__init__()
         num_layers = len(layer_sizes) - 1
         layers = []
