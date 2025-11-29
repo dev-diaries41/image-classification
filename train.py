@@ -68,31 +68,27 @@ def train(model, config: TrainConfig, dataset_dir):
         
         avg_train_loss = running_loss / len(train_loader)
         train_history.append(avg_train_loss)
-        print(f"Epoch {epoch+1} Training Loss: {avg_train_loss:.4f}")
 
-        # Evaluate on test set if provided
-        if test_loader:
-            avg_test_loss, test_accuracy = evaluate(model, test_loader)
-            test_history.append(avg_test_loss)
-            test_acc_history.append(test_accuracy)
-            print(f"Epoch {epoch+1} Test Loss: {avg_test_loss:.4f}, Test Accuracy: {test_accuracy:.4f}")
+        avg_test_loss, test_accuracy = evaluate(model, test_loader)
+        test_history.append(avg_test_loss)
+        test_acc_history.append(test_accuracy)
+        print(f"Epoch {epoch+1} | Training Loss: {avg_train_loss:.4f} | Test Loss: {avg_test_loss:.4f} | Test Accuracy: {test_accuracy:.4f}")
 
-            # Adjust learning rate if test loss plateaus
-            scheduler.step(avg_test_loss)
+        scheduler.step(avg_test_loss)
 
-            # Early Stopping Check
-            if avg_test_loss < best_loss:
-                best_loss = avg_test_loss
-                patience_counter = 0 
-                torch.save({"model_state": model.state_dict(), "config": asdict(config)}, config.checkpoint_save_path)
-                print(f"Best model saved: {config.checkpoint_save_path}")
-            else:
-                patience_counter += 1
-                print(f"Early stopping patience: {patience_counter}/{config.patience}")
+        # Early Stopping Check
+        if avg_test_loss < best_loss:
+            best_loss = avg_test_loss
+            patience_counter = 0 
+            torch.save({"model_state": model.state_dict(), "config": asdict(config)}, config.checkpoint_save_path)
+            print(f"Best model saved: {config.checkpoint_save_path}")
+        else:
+            patience_counter += 1
+            print(f"Early stopping patience: {patience_counter}/{config.patience}")
 
-            if patience_counter >= config.patience:
-                print("Early stopping triggered! Training stopped.")
-                break
+        if patience_counter >= config.patience:
+            print("Early stopping triggered! Training stopped.")
+            break
     
     torch.save({"model_state": model.state_dict(), "config": asdict(config)}, config.model_save_path)
     print(f"Final model saved: {config.model_save_path}")
