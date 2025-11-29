@@ -34,7 +34,7 @@ class ImageClassifier(nn.Module):
     
 
 class ImageClassifierWithMLP(nn.Module):
-    def __init__(self, num_classes, backbone='resnet', mlp_hidden=256, alpha_sharpness = 1, gate_threshold = 0.45):
+    def __init__(self, num_classes, backbone='resnet', mlp_hidden=256, alpha_sharpness = 1, gate_threshold = 0.6):
         super().__init__()
         if backbone == 'resnet':
             self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
@@ -55,16 +55,14 @@ class ImageClassifierWithMLP(nn.Module):
         return self.mlp(features, return_activations=return_activations)
     
     
-    def gate_fn(self, module, x, y_true, y_pred):
-        # Convert logits to probabilities
-        probs = F.softmax(y_pred, dim=1)
-        # Compute per-neuron error using one-hot labels
-        num_classes = probs.shape[1]
-        y_true_onehot = F.one_hot(y_true, num_classes=num_classes).float()
-        err = torch.mean(torch.abs(y_true_onehot - probs), dim=0)  # shape: (out_features,)
-        # Inverted error gate: low error → strong update
-        err_gate = 1.0 - torch.sigmoid(self.alpha_sharpness * err)
-        return err_gate
+    def gate_fn(self, module, x, **kwargs):
+        loss = kwargs.get('loss', None)
+        avg_loss = kwargs.get('avg_loss', None)
+        if loss is not None and avg_loss is not None:
+            gate = torch.sigmoid(torch.tensor(loss / avg_loss, dtype=torch.float32, device=x.device))
+            return gate
+        print("Warning: loss and avg loss not passed")
+        return 1.0
 
 
 class HebbianNeuron(nn.Module):
@@ -137,7 +135,7 @@ class HebbianNeuron(nn.Module):
         return out
 
     @torch.no_grad()
-    def local_hebb_update(self, pre_act, post_act, y_true, y_pred, verbose = False):
+    def local_hebb_update(self, pre_act, post_act, verbose = False, **kwargs):
         """
         pre_act: (batch, in_features)
         post_act: (batch, out_features)
@@ -153,7 +151,7 @@ class HebbianNeuron(nn.Module):
             self.W_dist.mul_(1.0 - float(self.decay_dist))
             
 
-        gate = self.gate_fn(self, x=pre_act, y_true=y_true, y_pred=y_pred)
+        gate = self.gate_fn(self, x=pre_act, **kwargs)
         # Normalize gate into a tensor on the correct device/dtype for in-place ops.
         if isinstance(gate, torch.Tensor):
             # ensure same device and dtype as weights/traces
@@ -191,7 +189,7 @@ class HebbianNeuron(nn.Module):
 
 class HebbianMLP(nn.Module):
     def __init__(self, layer_sizes, gate_fn, gate_threshold = 0.4, alpha_hebb=1e-2, decay_dist=1e-4,
-                 trace_decay=0.99, p_dropout=0.2, last_p_dropout=0.0, hebb_start = None):
+                 trace_decay=0.85, p_dropout=0.2, last_p_dropout=0.0, hebb_start = None):
         super().__init__()
         num_layers = len(layer_sizes) - 1
         layers = []
@@ -222,7 +220,7 @@ class HebbianMLP(nn.Module):
         return (out, activations) if return_activations else (out, None)
     
 
-    def apply_hebb(self, acts, y_true, y_pred, verbose=False):
+    def apply_hebb(self, acts, verbose=False, **kwargs):
         """
         Apply Hebbian updates using activations collected from a forward pass.
         Optionally logs per-layer gate histograms.
@@ -231,7 +229,7 @@ class HebbianMLP(nn.Module):
             for i, (layer, (pre, post)) in enumerate(zip(self.layers, acts)):
                 if i < self.hebb_start:
                     continue                
-                layer.local_hebb_update(pre.detach(), post.detach(), y_true=y_true, y_pred=y_pred, verbose=verbose),
+                layer.local_hebb_update(pre.detach(), post.detach(), verbose=verbose, **kwargs),
 
 
     def ewc_loss(self, fisher, params_old, lambda_ewc=1.0):
