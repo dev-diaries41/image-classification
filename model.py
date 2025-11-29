@@ -58,20 +58,12 @@ class ImageClassifierWithMLP(nn.Module):
     def gate_fn(self, module, x, y_true, y_pred):
         # Convert logits to probabilities
         probs = F.softmax(y_pred, dim=1)
-
         # Compute per-neuron error using one-hot labels
         num_classes = probs.shape[1]
         y_true_onehot = F.one_hot(y_true, num_classes=num_classes).float()
         err = torch.mean(torch.abs(y_true_onehot - probs), dim=0)  # shape: (out_features,)
-
-        # Per-neuron input activation norm
-        act_norm = x.norm(dim=1)  # shape: (batch,)
-        act_norm = act_norm.unsqueeze(1).expand(-1, module.W_prox.shape[0])
-        act_norm = act_norm.mean(dim=0) 
-
         # Inverted error gate: low error → strong update
         err_gate = 1.0 - torch.sigmoid(self.alpha_sharpness * err)
-        act_gate = torch.sigmoid(self.alpha_sharpness * act_norm)
         return err_gate
 
 
