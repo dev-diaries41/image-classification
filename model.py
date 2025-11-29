@@ -34,7 +34,7 @@ class ImageClassifier(nn.Module):
     
 
 class ImageClassifierWithMLP(nn.Module):
-    def __init__(self, num_classes, backbone='resnet', mlp_hidden=256, alpha_sharpness = 10):
+    def __init__(self, num_classes, backbone='resnet', mlp_hidden=256, alpha_sharpness = 1, gate_threshold = 0.45):
         super().__init__()
         if backbone == 'resnet':
             self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
@@ -47,7 +47,7 @@ class ImageClassifierWithMLP(nn.Module):
         else:
             raise ValueError("Backbone not supported")
         
-        self.mlp = HebbianMLP(layer_sizes=[in_features, mlp_hidden, num_classes], gate_fn=self.gate_fn)
+        self.mlp = HebbianMLP(layer_sizes=[in_features, mlp_hidden, num_classes], gate_fn=self.gate_fn, gate_threshold =gate_threshold)
         self.alpha_sharpness = alpha_sharpness
         
     def forward(self, x, return_activations=False):
@@ -64,9 +64,9 @@ class ImageClassifierWithMLP(nn.Module):
         act_norm = x.norm(dim=1)  # shape: (batch,)
         act_norm = act_norm.unsqueeze(1).expand(-1, module.W_prox.shape[0])
         act_norm = act_norm.mean(dim=0) 
-
+        act_norm_scaled = act_norm / module.W_prox.shape[1]
         err_gate = torch.sigmoid(self.alpha_sharpness * err)
-        act_gate = torch.sigmoid(self.alpha_sharpness * act_norm)
+        act_gate = torch.sigmoid(self.alpha_sharpness * act_norm_scaled)
         return err_gate * act_gate
 
 
@@ -84,11 +84,12 @@ class HebbianNeuron(nn.Module):
         self,
         in_features,
         out_features,
+        gate_fn,
         alpha_hebb=1e-2,
         decay_dist=0.0,
-        gate_fn=None,
+        gate_threshold = 0.4,
         p_dropout=0.2,
-        trace_decay=0.99
+        trace_decay=0.99,
     ):
         super().__init__()
         # Proximal weights (standard trainable parameters)
@@ -106,7 +107,8 @@ class HebbianNeuron(nn.Module):
         # Hebbian-related hyperparams
         self.alpha_hebb = alpha_hebb
         self.decay_dist = decay_dist
-        self.gate_fn = gate_fn or (lambda module, **kw: 1.0)
+        self.gate_fn = gate_fn
+        self.gate_threshold = gate_threshold
 
         # Activation + dropout
         self.activation = nn.LeakyReLU(0.01)
@@ -139,7 +141,7 @@ class HebbianNeuron(nn.Module):
         return out
 
     @torch.no_grad()
-    def local_hebb_update(self, pre_act, post_act, y_true, y_pred):
+    def local_hebb_update(self, pre_act, post_act, y_true, y_pred, verbose = False):
         """
         pre_act: (batch, in_features)
         post_act: (batch, out_features)
@@ -148,11 +150,9 @@ class HebbianNeuron(nn.Module):
         batch_size = pre_act.shape[0] if pre_act.shape[0] > 0 else 1
         hebb = torch.einsum('bi,bj->ij', post_act, pre_act) / float(batch_size)
 
-        # Update eligibility trace: decay + accumulate
         self.E.mul_(self.trace_decay)
         self.E.add_(hebb)
 
-        # Weight decay on distal weights
         if self.decay_dist and self.decay_dist > 0:
             self.W_dist.mul_(1.0 - float(self.decay_dist))
             
@@ -172,6 +172,18 @@ class HebbianNeuron(nn.Module):
             # python scalar (int/float) -> convert to tensor on correct device
             gate = torch.tensor(gate, dtype=self.W_dist.dtype, device=self.W_dist.device)
 
+        mean_gate = gate.mean().item()
+
+        if verbose:
+            # histogram as CPU numpy for TensorBoard/print
+            hist = gate.detach().cpu().numpy()
+            print(f"Gate mean={mean_gate:.4f}, min={hist.min():.4f}, max={hist.max():.4f}")
+            # Optional: send to TensorBoard
+            # self.tb_writer.add_histogram(f'hebb/gate_layer_{i}', hist, global_step)
+
+        if mean_gate < self.gate_threshold:
+            return
+
         # Apply Hebbian trace scaled by alpha and gate (works with scalar or per-neuron gate)
         self.W_dist.add_(gate * self.alpha_hebb * self.E)
 
@@ -182,8 +194,8 @@ class HebbianNeuron(nn.Module):
 
 
 class HebbianMLP(nn.Module):
-    def __init__(self, layer_sizes, alpha_hebb=1e-2, decay_dist=1e-4,
-                 trace_decay=0.99, gate_fn=None, p_dropout=0.2, last_p_dropout=0.0, hebb_start = None):
+    def __init__(self, layer_sizes, gate_fn, gate_threshold = 0.4, alpha_hebb=1e-2, decay_dist=1e-4,
+                 trace_decay=0.99, p_dropout=0.2, last_p_dropout=0.0, hebb_start = None):
         super().__init__()
         num_layers = len(layer_sizes) - 1
         layers = []
@@ -194,6 +206,7 @@ class HebbianMLP(nn.Module):
                                         alpha_hebb=alpha_hebb,
                                         decay_dist=decay_dist,
                                         gate_fn=gate_fn,
+                                        gate_threshold = gate_threshold,
                                         p_dropout=p,
                                         trace_decay=trace_decay))
         self.layers = nn.ModuleList(layers)
@@ -213,7 +226,7 @@ class HebbianMLP(nn.Module):
         return (out, activations) if return_activations else (out, None)
     
 
-    def apply_hebb(self, acts, y_true, y_pred, gate_threshold=0.2, log_gates=False):
+    def apply_hebb(self, acts, y_true, y_pred, verbose=False):
         """
         Apply Hebbian updates using activations collected from a forward pass.
         Optionally logs per-layer gate histograms.
@@ -221,23 +234,8 @@ class HebbianMLP(nn.Module):
         with torch.no_grad():
             for i, (layer, (pre, post)) in enumerate(zip(self.layers, acts)):
                 if i < self.hebb_start:
-                    continue
-
-                gate = layer.gate_fn(layer, x=pre, y_true=y_true, y_pred=y_pred)
-                mean_gate = gate.mean().item()
-
-                if log_gates:
-                    # histogram as CPU numpy for TensorBoard/print
-                    hist = gate.detach().cpu().numpy()
-                    print(f"[Hebb][Layer {i}] Gate mean={mean_gate:.4f}, "
-                        f"min={hist.min():.4f}, max={hist.max():.4f}")
-                    # Optional: send to TensorBoard
-                    # self.tb_writer.add_histogram(f'hebb/gate_layer_{i}', hist, global_step)
-
-                if mean_gate < gate_threshold:
-                    continue
-
-                layer.local_hebb_update(pre.detach(), post.detach(), y_true=y_true, y_pred=y_pred)
+                    continue                
+                layer.local_hebb_update(pre.detach(), post.detach(), y_true=y_true, y_pred=y_pred, verbose=verbose),
 
 
     def ewc_loss(self, fisher, params_old, lambda_ewc=1.0):
