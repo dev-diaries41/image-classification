@@ -94,7 +94,7 @@ def train(model, config: TrainConfig, dataset_dir):
                 print("Early stopping triggered! Training stopped.")
                 break
     
-    torch.save(model.state_dict(), config.model_save_path)
+    torch.save({"model_state": model.state_dict(), "config": asdict(config)}, config.model_save_path)
     print(f"Final model saved: {config.model_save_path}")
     return train_history, test_history, test_acc_history
 
