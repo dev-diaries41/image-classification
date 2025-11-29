@@ -27,8 +27,10 @@ def main():
     train_parser = subparsers.add_parser("train")
     train_parser.add_argument("-d", "--data", type=str, required=True, help="Directory with training data")
     train_parser.add_argument("-e", "--epochs", type=int, default=100, help="Number of training epochs")
+    train_parser.add_argument("-p", "--patience", type=int, default=100, help="Max number of epochs without improvement before early stopping")
+    train_parser.add_argument( "--lr-patience", type=int, default=100, help="LR scheduler patience")
     train_parser.add_argument("-b", "--batch-size", type=int, default=8, help="Batch size for training")
-    train_parser.add_argument("--lr", type=float, default=0.001, help="Learning rate")
+    train_parser.add_argument("--lr", type=float, default=0.0001, help="Learning rate")
     train_parser.add_argument("--use-hebb", action="store_true",  help="Use hebbian learning")
     train_parser.add_argument("-t", "--model-type", type=str, required=True, choices=["resnet", "mobilenet"],  help="Type of model to use")
 
@@ -59,6 +61,8 @@ def main():
             epochs=args.epochs,
             batch_size=args.batch_size,
             lr=args.lr,
+            patience=args.patience,
+            lr_patience=args.lr_patience
             )
         
         if args.use_hebb:
