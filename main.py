@@ -87,8 +87,8 @@ def main():
         sample_image = args.input_image
         prediction = inference(model, device, sample_image, class_names)
         print(f"Predicted class for the image '{sample_image}': {prediction}")
-    elif args.mode == 'validation':
-            print("Running validation...")
+    elif args.mode == 'test':
+            print("Running test...")
             ckpt = torch.load(args.ckpt, map_location=device, weights_only=False)
             config = TrainConfig(**ckpt['config'])
 
