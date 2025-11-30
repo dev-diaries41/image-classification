@@ -44,15 +44,18 @@ def main():
     
     args = parser.parse_args()
 
-    class_names = sorted(os.listdir(args.data))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if args.mode == "train":
         hebb_prefix = "hebb_" if args.use_hebb else ""
         checkpoint_path = get_new_filename("checkpoints", f"{args.model_type}_{hebb_prefix}", ".pt")
         final_model_path = get_new_filename("models", f"{args.model_type}_{hebb_prefix}", ".pt")
+        train_dataset_path = os.path.join(args.data, "train")
+        val_dataset_path = os.path.join(args.data, "val")
+        class_names = sorted(os.listdir(train_dataset_path))
 
         config = TrainConfig(
+            num_classes=len(class_names),
             checkpoint_save_path=checkpoint_path, 
             model_save_path=final_model_path,
             model_type=args.model_type,
@@ -64,13 +67,13 @@ def main():
             lr_patience=args.lr_patience
             )
         
+    
         if args.use_hebb:
             model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=args.model_type)
         else:
             model =  ImageClassifier(num_classes=len(class_names), architecture=args.model_type)
        
-        train_dataset_path = os.path.join(args.data, "train")
-        val_dataset_path = os.path.join(args.data, "val")
+        
         train_losses, test_losses, test_acc = train(model, config, train_dataset_path, val_dataset_path)
         plot_path = get_new_filename("results", f"loss_accuracy_plot_{args.model_type}_{hebb_prefix}", ".png")
         plot_results(train_losses, test_losses, test_acc, output_path=plot_path)
@@ -80,9 +83,9 @@ def main():
         config = TrainConfig(**ckpt['config'])
 
         if config.use_hebb:
-            model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=config.model_type)
+            model = ImageClassifierWithMLP(num_classes=config.num_classes, backbone=config.model_type)
         else:
-            model =  ImageClassifier(num_classes=len(class_names), architecture=config.model_type)
+            model =  ImageClassifier(num_classes=config.num_classes, architecture=config.model_type)
         model.load_state_dict(ckpt['model_state'])
         sample_image = args.input_image
         prediction = inference(model, device, sample_image, class_names)
@@ -93,10 +96,10 @@ def main():
             config = TrainConfig(**ckpt['config'])
 
             if config.use_hebb:
-                model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=config.model_type)
+                model = ImageClassifierWithMLP(num_classes=config.num_classes, backbone=config.model_type)
             else:
-                model = ImageClassifier(num_classes=len(class_names), architecture=config.model_type)
-            
+                model =  ImageClassifier(num_classes=config.num_classes, architecture=config.model_type)
+                
             model.load_state_dict(ckpt['model_state'])
             loss, accuracy = test(model, args.data)
             print(f" Validation Loss: {loss:.4f}, Validation Accuracy: {accuracy:.4f}")

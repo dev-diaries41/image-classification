@@ -9,6 +9,7 @@ import numpy as np
 
 @dataclass
 class TrainConfig:
+    num_classes: int
     checkpoint_save_path: str
     model_save_path: str
     model_type: str
