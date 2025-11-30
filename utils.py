@@ -1,4 +1,5 @@
 import os
+import shutil
 
 def read_dataset_dir(dataset_dir):
     if not os.path.isdir(dataset_dir):
@@ -46,3 +47,22 @@ def get_new_filename(dir_path: str, prefix: str, ext):
             except ValueError:
                 continue
     return os.path.join(dir_path, f"{prefix}{highest + 1}{ext}")
+
+
+def split_dataset_validation(dataset_dir: str, validation_size: int):
+    validation_dir = os.path.join(os.path.dirname(dataset_dir), f"{os.path.basename(dataset_dir)}_validation")
+    for class_name in os.listdir(dataset_dir):
+        class_dir = os.path.join(dataset_dir, class_name)
+        if os.path.isdir(class_dir):
+            for filename in os.listdir(class_dir)[-validation_size:]:
+                filepath = os.path.join(class_dir, filename)
+                try:
+                    validation_class_dir = os.path.join(validation_dir, class_name)
+                    os.makedirs(validation_class_dir, exist_ok=True)
+                    shutil.move(filepath, validation_class_dir)
+                except Exception as e:
+                    # print(e)
+                    continue
+
+                
+
