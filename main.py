@@ -5,7 +5,7 @@ import torch
 import numpy as np
 import random
 from model import ImageClassifier, ImageClassifierWithMLP
-from train import train, validate, TrainConfig
+from train import train, test, TrainConfig
 from plot import plot_results
 from inference import inference
 from utils import get_new_filename
@@ -25,7 +25,7 @@ def main():
     subparsers = parser.add_subparsers(dest='mode')
 
     train_parser = subparsers.add_parser("train")
-    train_parser.add_argument("-d", "--data", type=str, required=True, help="Directory with training data")
+    train_parser.add_argument("-d", "--data", type=str, required=True, help="Directory with training datasets (train and val)")
     train_parser.add_argument("-e", "--epochs", type=int, default=100, help="Number of training epochs")
     train_parser.add_argument("-p", "--patience", type=int, default=10, help="Max number of epochs without improvement before early stopping")
     train_parser.add_argument( "--lr-patience", type=int, default=3, help="LR scheduler patience")
@@ -38,21 +38,24 @@ def main():
     infer_parser.add_argument("-m","--model", required=True, type=str, help="Path to model to use for inference")
     infer_parser.add_argument("-i", "--input-image", required=True, type=str, help="Image file for inference")
 
-    val_parser = subparsers.add_parser('validation')
-    val_parser.add_argument("-d", "--data", required=True, type=str, help="Directory with training data")
-    val_parser.add_argument('--ckpt', required=True, help='Path to saved checkpoint')
+    test_parser = subparsers.add_parser('test')
+    test_parser.add_argument("-d", "--data", required=True, type=str, help="Directory with test dataset")
+    test_parser.add_argument('--ckpt', required=True, help='Path to saved checkpoint')
     
     args = parser.parse_args()
 
-    class_names = sorted(os.listdir(args.data))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     if args.mode == "train":
         hebb_prefix = "hebb_" if args.use_hebb else ""
         checkpoint_path = get_new_filename("checkpoints", f"{args.model_type}_{hebb_prefix}", ".pt")
         final_model_path = get_new_filename("models", f"{args.model_type}_{hebb_prefix}", ".pt")
+        train_dataset_path = os.path.join(args.data, "train")
+        val_dataset_path = os.path.join(args.data, "val")
+        class_names = sorted(os.listdir(train_dataset_path))
 
         config = TrainConfig(
+            num_classes=len(class_names),
             checkpoint_save_path=checkpoint_path, 
             model_save_path=final_model_path,
             model_type=args.model_type,
@@ -64,12 +67,14 @@ def main():
             lr_patience=args.lr_patience
             )
         
+    
         if args.use_hebb:
             model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=args.model_type)
         else:
             model =  ImageClassifier(num_classes=len(class_names), architecture=args.model_type)
        
-        train_losses, test_losses, test_acc = train(model, config, args.data)
+        
+        train_losses, test_losses, test_acc = train(model, config, train_dataset_path, val_dataset_path)
         plot_path = get_new_filename("results", f"loss_accuracy_plot_{args.model_type}_{hebb_prefix}", ".png")
         plot_results(train_losses, test_losses, test_acc, output_path=plot_path)
     elif args.mode == "infer":
@@ -78,25 +83,25 @@ def main():
         config = TrainConfig(**ckpt['config'])
 
         if config.use_hebb:
-            model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=config.model_type)
+            model = ImageClassifierWithMLP(num_classes=config.num_classes, backbone=config.model_type)
         else:
-            model =  ImageClassifier(num_classes=len(class_names), architecture=config.model_type)
+            model =  ImageClassifier(num_classes=config.num_classes, architecture=config.model_type)
         model.load_state_dict(ckpt['model_state'])
         sample_image = args.input_image
         prediction = inference(model, device, sample_image, class_names)
         print(f"Predicted class for the image '{sample_image}': {prediction}")
-    elif args.mode == 'validation':
-            print("Running validation...")
+    elif args.mode == 'test':
+            print("Running test...")
             ckpt = torch.load(args.ckpt, map_location=device, weights_only=False)
             config = TrainConfig(**ckpt['config'])
 
             if config.use_hebb:
-                model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=config.model_type)
+                model = ImageClassifierWithMLP(num_classes=config.num_classes, backbone=config.model_type)
             else:
-                model = ImageClassifier(num_classes=len(class_names), architecture=config.model_type)
-            
+                model =  ImageClassifier(num_classes=config.num_classes, architecture=config.model_type)
+                
             model.load_state_dict(ckpt['model_state'])
-            loss, accuracy = validate(model, args.data)
+            loss, accuracy = test(model, args.data)
             print(f" Validation Loss: {loss:.4f}, Validation Accuracy: {accuracy:.4f}")
 
 if __name__ == "__main__":

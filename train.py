@@ -3,13 +3,13 @@ from torch.optim import Adam
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from tqdm import tqdm
 from torch.utils.data import DataLoader, random_split
-from utils import read_dataset_dir
-from data import ImageDataset
+from data import get_dataset
 from dataclasses import dataclass, asdict
 import numpy as np
 
 @dataclass
 class TrainConfig:
+    num_classes: int
     checkpoint_save_path: str
     model_save_path: str
     model_type: str
@@ -23,7 +23,7 @@ class TrainConfig:
     min_lr: float=1e-6
 
 
-def train(model, config: TrainConfig, dataset_dir):
+def train(model, config: TrainConfig, train_dataset_dir: str, val_dataset_dir: str):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
     optimizer = Adam(model.parameters(), lr=config.lr)
@@ -31,22 +31,20 @@ def train(model, config: TrainConfig, dataset_dir):
     criterion = torch.nn.CrossEntropyLoss()
 
     train_history = []
-    test_history = []
-    test_acc_history = []
+    val_history = []
+    val_acc_history = []
 
     best_loss = float("inf")
     patience_counter = 0  # Tracks epochs without improvement
     use_hebb = hasattr(model, "mlp")
 
-    file_paths, labels, class_names = read_dataset_dir(dataset_dir)
-    numbered_labels = [class_names.index(label) for label in labels]
-    dataset = ImageDataset(file_paths, numbered_labels)        
-    train_size = int(0.75 * len(dataset))
-    test_size = len(dataset) - train_size
-    train_dataset, test_dataset = random_split(dataset, [train_size, test_size])
+    train_dataset = get_dataset(train_dataset_dir)        
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
-    test_loader = DataLoader(test_dataset, batch_size=1, shuffle=False)
-    
+
+    val_dataset = get_dataset(val_dataset_dir)        
+    val_loader = DataLoader(val_dataset, batch_size=1, shuffle=False)
+
+
     for epoch in range(config.epochs):
         running_loss = 0.0
         model.train()
@@ -70,16 +68,16 @@ def train(model, config: TrainConfig, dataset_dir):
         avg_train_loss = running_loss / len(train_loader)
         train_history.append(avg_train_loss)
 
-        avg_test_loss, test_accuracy = evaluate(model, test_loader)
-        test_history.append(avg_test_loss)
-        test_acc_history.append(test_accuracy)
-        print(f"Epoch {epoch+1} | Training Loss: {avg_train_loss:.4f} | Test Loss: {avg_test_loss:.4f} | Test Accuracy: {test_accuracy:.4f}")
+        avg_val_loss, val_accuracy = evaluate(model, val_loader)
+        val_history.append(avg_val_loss)
+        val_acc_history.append(val_accuracy)
+        print(f"Epoch {epoch+1} | Training Loss: {avg_train_loss:.4f} | Val Loss: {avg_val_loss:.4f} | Val Accuracy: {val_accuracy:.4f}")
 
-        scheduler.step(avg_test_loss)
+        scheduler.step(avg_val_loss)
 
         # Early Stopping Check
-        if avg_test_loss < best_loss:
-            best_loss = avg_test_loss
+        if avg_val_loss < best_loss:
+            best_loss = avg_val_loss
             patience_counter = 0 
             torch.save({"model_state": model.state_dict(), "config": asdict(config)}, config.checkpoint_save_path)
             print(f"Best model saved: {config.checkpoint_save_path}")
@@ -93,7 +91,7 @@ def train(model, config: TrainConfig, dataset_dir):
     
     torch.save({"model_state": model.state_dict(), "config": asdict(config)}, config.model_save_path)
     print(f"Final model saved: {config.model_save_path}")
-    return train_history, test_history, test_acc_history
+    return train_history, val_history, val_acc_history
 
 
 
@@ -102,7 +100,6 @@ def evaluate(model, data_loader):
     total_loss = 0.0
     correct = 0
     total = 0
-    use_hebb = hasattr(model, "mlp")
     criterion = torch.nn.CrossEntropyLoss()
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
@@ -122,10 +119,7 @@ def evaluate(model, data_loader):
     return avg_loss, accuracy
 
 
-def validate(model, dataset_dir):
-    file_paths, labels, class_names = read_dataset_dir(dataset_dir)
-    numbered_labels = [class_names.index(label) for label in labels]
-    dataset = ImageDataset(file_paths, numbered_labels)        
+def test(model, dataset_dir):
+    dataset = get_dataset(dataset_dir)    
     loader = DataLoader(dataset, batch_size=1, shuffle=False)
     return evaluate(model, loader)
-

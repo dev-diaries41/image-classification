@@ -32,7 +32,7 @@ class ImageClassifier(nn.Module):
     
 
 class ImageClassifierWithMLP(nn.Module):
-    def __init__(self, num_classes, backbone='resnet', mlp_hidden=256, alpha_sharpness = 1, gate_threshold = 0.6):
+    def __init__(self, num_classes, backbone='resnet', mlp_hidden=256):
         super().__init__()
         if backbone == 'resnet':
             self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
@@ -45,8 +45,8 @@ class ImageClassifierWithMLP(nn.Module):
         else:
             raise ValueError("Backbone not supported")
         
-        self.mlp = HebbianMLP(layer_sizes=[in_features, mlp_hidden, num_classes], gate_fn=self.gate_fn, gate_threshold =gate_threshold)
-        self.alpha_sharpness = alpha_sharpness
+        gate_threshold = torch.sigmoid(torch.tensor(1)).item()
+        self.mlp = HebbianMLP(layer_sizes=[in_features, mlp_hidden, num_classes], gate_fn=self.gate_fn, gate_threshold = gate_threshold)
         
     def forward(self, x, return_activations=False):
         features = self.backbone(x)
@@ -57,7 +57,7 @@ class ImageClassifierWithMLP(nn.Module):
         loss = kwargs.get('loss', None)
         avg_loss = kwargs.get('avg_loss', None)
         if loss is not None and avg_loss is not None:
-            gate = torch.sigmoid(torch.tensor(loss / avg_loss, dtype=torch.float32, device=x.device))
+            gate = torch.sigmoid(torch.tensor(avg_loss / loss, dtype=torch.float32, device=x.device))
             return gate
         print("Warning: loss and avg loss not passed")
         return 1.0

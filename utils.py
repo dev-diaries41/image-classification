@@ -1,5 +1,6 @@
 import os
 import shutil
+import random
 
 def read_dataset_dir(dataset_dir):
     if not os.path.isdir(dataset_dir):
@@ -49,17 +50,21 @@ def get_new_filename(dir_path: str, prefix: str, ext):
     return os.path.join(dir_path, f"{prefix}{highest + 1}{ext}")
 
 
-def split_dataset_validation(dataset_dir: str, validation_size: int):
-    validation_dir = os.path.join(os.path.dirname(dataset_dir), f"{os.path.basename(dataset_dir)}_validation")
+def split_dataset(dataset_dir: str, size: int, dirname: str, seed: int = 42):
+    random.seed(seed)
+    new_dataset_dir = os.path.join(os.path.dirname(dataset_dir), dirname)
     for class_name in os.listdir(dataset_dir):
         class_dir = os.path.join(dataset_dir, class_name)
         if os.path.isdir(class_dir):
-            for filename in os.listdir(class_dir)[-validation_size:]:
+            class_filenames = os.listdir(class_dir)
+            indices = random.sample(range(len(class_filenames)), size)
+            selected = [class_filenames[n] for n in indices]
+            for filename in selected:
                 filepath = os.path.join(class_dir, filename)
                 try:
-                    validation_class_dir = os.path.join(validation_dir, class_name)
-                    os.makedirs(validation_class_dir, exist_ok=True)
-                    shutil.move(filepath, validation_class_dir)
+                    destination_dir = os.path.join(new_dataset_dir, class_name)
+                    os.makedirs(destination_dir, exist_ok=True)
+                    shutil.move(filepath, destination_dir)
                 except Exception as e:
                     # print(e)
                     continue
