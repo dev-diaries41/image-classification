@@ -8,7 +8,7 @@ from model import ImageClassifier, ImageClassifierWithMLP
 from train import train, test, TrainConfig
 from plot import plot_results
 from inference import inference
-from utils import get_new_filename
+from utils import get_new_filename, split_dataset
 
 def seed_all(seed=42):
     random.seed(seed)
@@ -41,6 +41,11 @@ def main():
     test_parser = subparsers.add_parser('test')
     test_parser.add_argument("-d", "--data", required=True, type=str, help="Directory with test dataset")
     test_parser.add_argument('--ckpt', required=True, help='Path to saved checkpoint')
+
+    data_parser = subparsers.add_parser('split')
+    data_parser.add_argument("-d", "--data", required=True, type=str, help="Directory with dataset")
+    data_parser.add_argument("-s", "--size", required=True, type=int, help="The split size")
+    data_parser.add_argument("-n", "--name", required=True, type=str, help="Directory name for new dataset")
     
     args = parser.parse_args()
 
@@ -103,6 +108,9 @@ def main():
             model.load_state_dict(ckpt['model_state'])
             loss, accuracy = test(model, args.data)
             print(f" Validation Loss: {loss:.4f}, Validation Accuracy: {accuracy:.4f}")
+    elif args.mode == "split":
+        print("Splitting dataset...")
+        split_dataset(args.data, args.size, args.name)
 
 if __name__ == "__main__":
     main()
