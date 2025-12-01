@@ -32,7 +32,7 @@ class ImageClassifier(nn.Module):
     
 
 class ImageClassifierWithMLP(nn.Module):
-    def __init__(self, num_classes, backbone='resnet', mlp_hidden=256):
+    def __init__(self, num_classes, backbone='resnet', mlp_hidden=256, alpha_hebb = 5e-3):
         super().__init__()
         if backbone == 'resnet':
             self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
@@ -46,7 +46,7 @@ class ImageClassifierWithMLP(nn.Module):
             raise ValueError("Backbone not supported")
         
         gate_threshold = torch.sigmoid(torch.tensor(1)).item()
-        self.mlp = HebbianMLP(layer_sizes=[in_features, mlp_hidden, num_classes], gate_fn=self.gate_fn, gate_threshold = gate_threshold)
+        self.mlp = HebbianMLP(layer_sizes=[in_features, mlp_hidden, num_classes], gate_fn=self.gate_fn, gate_threshold = gate_threshold, alpha_hebb=alpha_hebb)
         
     def forward(self, x, return_activations=False):
         features = self.backbone(x)
