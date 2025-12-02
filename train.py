@@ -21,6 +21,8 @@ class TrainConfig:
     lr_patience: int = 3
     lr_factor: float=0.5
     min_lr: float=1e-6
+    alpha_hebb: float = 5e-3
+    mlp_hidden: int = 256
 
 
 def train(model, config: TrainConfig, train_dataset_dir: str, val_dataset_dir: str):
