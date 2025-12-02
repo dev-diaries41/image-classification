@@ -73,7 +73,7 @@ def main():
             patience=args.patience,
             lr_patience=args.lr_patience,
             alpha_hebb=args.alpha_hebb,
-            mlp_hidden=args.mlp_hidden
+            mlp_hidden=args.mlp_size
             )
         
     
