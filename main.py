@@ -31,6 +31,8 @@ def main():
     train_parser.add_argument( "--lr-patience", type=int, default=3, help="LR scheduler patience")
     train_parser.add_argument("-b", "--batch-size", type=int, default=8, help="Batch size for training")
     train_parser.add_argument("--lr", type=float, default=0.0001, help="Learning rate")
+    train_parser.add_argument("--mlp-size", type=int, default=256, help="Size of Hebbian MLP hidden layer")
+    train_parser.add_argument("--alpha-hebb", type=float, default=5e-3, help="Hebbian Learning rate")
     train_parser.add_argument("--use-hebb", action="store_true",  help="Use hebbian learning")
     train_parser.add_argument("-t", "--model-type", type=str, required=True, choices=["resnet", "mobilenet"],  help="Type of model to use")
 
@@ -69,14 +71,16 @@ def main():
             batch_size=args.batch_size,
             lr=args.lr,
             patience=args.patience,
-            lr_patience=args.lr_patience
+            lr_patience=args.lr_patience,
+            alpha_hebb=args.alpha_hebb,
+            mlp_hidden=args.mlp_hidden
             )
         
     
         if args.use_hebb:
-            model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=args.model_type)
+            model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=config.model_type, mlp_hidden=config.mlp_hidden)
         else:
-            model =  ImageClassifier(num_classes=len(class_names), architecture=args.model_type)
+            model =  ImageClassifier(num_classes=len(class_names), architecture=config.model_type)
        
         
         train_losses, test_losses, test_acc = train(model, config, train_dataset_path, val_dataset_path)
@@ -88,7 +92,7 @@ def main():
         config = TrainConfig(**ckpt['config'])
 
         if config.use_hebb:
-            model = ImageClassifierWithMLP(num_classes=config.num_classes, backbone=config.model_type)
+            model = ImageClassifierWithMLP(num_classes=config.num_classes, backbone=config.model_type, mlp_hidden=config.mlp_hidden)
         else:
             model =  ImageClassifier(num_classes=config.num_classes, architecture=config.model_type)
         model.load_state_dict(ckpt['model_state'])
@@ -101,7 +105,7 @@ def main():
             config = TrainConfig(**ckpt['config'])
 
             if config.use_hebb:
-                model = ImageClassifierWithMLP(num_classes=config.num_classes, backbone=config.model_type)
+                model = ImageClassifierWithMLP(num_classes=config.num_classes, backbone=config.model_type, mlp_hidden=config.mlp_hidden)
             else:
                 model =  ImageClassifier(num_classes=config.num_classes, architecture=config.model_type)
                 
