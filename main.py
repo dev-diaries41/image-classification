@@ -78,7 +78,7 @@ def main():
         
     
         if args.use_hebb:
-            model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=config.model_type, mlp_hidden=config.mlp_hidden)
+            model = ImageClassifierWithMLP(num_classes=len(class_names), backbone=config.model_type, mlp_hidden=config.mlp_hidden, alpha_hebb=config.alpha_hebb)
         else:
             model =  ImageClassifier(num_classes=len(class_names), architecture=config.model_type)
        
