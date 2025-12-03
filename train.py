@@ -54,16 +54,15 @@ def train(model, config: TrainConfig, train_dataset_dir: str, val_dataset_dir: s
             images = batch["image"].to(device)
             labels = batch["label"].to(device)
             optimizer.zero_grad()
-            if use_hebb:
-                y_pred, acts = model(images, return_activations = True)
-            else:
-                 y_pred = model(images)
+            y_pred = model(images)
             loss = criterion(y_pred, labels)
             loss.backward()
             
             if use_hebb and epoch > 1:
-                model.mlp.apply_hebb(acts, loss = loss.item(), avg_loss = np.mean(train_history[-5:] if len(train_history) >= 1 else 1))
-
+                model.eval()
+                x = model.backbone(images)
+                model.mlp.apply_hebb(x)
+                model.train()
             optimizer.step()
             running_loss += loss.item()
         
