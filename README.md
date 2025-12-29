@@ -1,161 +1,251 @@
 # Image Classification Pipeline
 
-This project provides an end-to-end pipeline for training an image classifier, running inference on images, and converting the trained model into a format suitable for mobile devices (Android) using **TFLite**.
+This project provides an end-to-end pipeline for training an image classifier, running inference on images, testing trained models, splitting datasets, and converting trained models into a format suitable for mobile devices (Android) using **TFLite**.
 
-The pipeline supports two main operations: **training** a model and **running inference**. Additionally, it includes a utility to **convert** the trained PyTorch model to **TFLite** for use in mobile devices.
+The pipeline supports four main operations:
+
+* **train** – train and validate a model
+* **infer** – run inference on a single image
+* **test** – evaluate a trained checkpoint on a test dataset
+* **split** – split a dataset into train/validation sets
+
+It also includes a utility to **convert** trained PyTorch models to **TFLite**.
+
+---
 
 ## Table of Contents
+
 1. [Requirements](#requirements)
 2. [Setup](#setup)
 3. [Usage](#usage)
-    - [Training Mode](#training-mode)
-    - [Inference Mode](#inference-mode)
-    - [Model Conversion (PyTorch to TFLite)](#model-conversion-pytorch-to-tflite)
-4. [Model and Dataset Structure](#model-and-dataset-structure)
-    - [Model](#model)
-    - [Training Pipeline](#training-pipeline)
-5. [Contributing](#contributing)
-6. [License](#license)
+
+   * [Training](#training)
+   * [Inference](#inference)
+   * [Testing](#testing)
+   * [Dataset Splitting](#dataset-splitting)
+   * [Model Conversion (PyTorch to TFLite)](#model-conversion-pytorch-to-tflite)
+
+---
 
 ## Requirements
 
-- Python 3.10
-- Other dependencies can be installed via the `requirements.txt` file.
+* Python 3.10
+* CUDA (optional, used automatically if available)
 
-### Install Dependencies:
+All Python dependencies are listed in `requirements.txt`.
+
+### Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
+---
+
 ## Setup
 
-### 1. Dataset
-You need a dataset for training your image classifier. The images should be stored in directories corresponding to their class labels. For example:
+### 1. Dataset Structure
+
+For training, the dataset directory **must** contain `train/` and `val/` subdirectories, each organized by class name:
 
 ```
 dataset/
+├── train/
+│   ├── reddit/
+│   │   ├── image1.jpg
+│   │   └── image2.jpg
+│   ├── twitter/
+│   └── other/
+└── val/
     ├── reddit/
-    │   ├── image1.jpg
-    │   ├── image2.jpg
     ├── twitter/
-    │   ├── image1.jpg
-    │   ├── image2.jpg
     └── other/
-        ├── image1.jpg
-        └── image2.jpg
 ```
 
-Make sure the dataset directory follows this structure, where each subdirectory corresponds to a specific class.
+Each subdirectory name is treated as a class label.
 
-### 2. Model
-This pipeline supports two pre-trained models:
-- **ResNet18**
-- **MobileNetV3-Large**
+For testing, the dataset only needs class directories (no split required):
 
-Both models are fine-tuned for your specific dataset by replacing the final fully connected layer to match the number of classes in the dataset. During training, the model weights are updated to fit the provided dataset.
-
-### 3. Class Names File
-The `class_names.txt` file should contain the class names, one per line. The order of class names is important, as it determines the model's output labels.
-
-Example `class_names.txt`:
 ```
-reddit
-twitter
-other
+test_dataset/
+├── reddit/
+├── twitter/
+└── other/
 ```
+
+---
+
+### 2. Supported Models
+
+The pipeline supports the following architectures:
+
+* **ResNet18**
+* **MobileNetV3-Large**
+
+Both models:
+
+* Are pre-trained on ImageNet
+* Have their final classification layer replaced to match `num_classes`
+* Are fully fine-tuned during training
+
+---
 
 ## Usage
 
-You can run the pipeline in three modes: `train`, `inference`, and `convert`. Use the `--mode` argument to select the mode.
-
-### Training Mode
-
-To train a new model or continue training an existing one, use the following command:
+The pipeline is controlled via `main.py` using subcommands.
 
 ```bash
-python main.py --mode train --dataset /path/to/your/dataset --epochs 100 --batch_size 8 --lr 0.001 --checkpoint checkpoint/screenshot_model --class_names /path/to/class_names.txt --model_type resnet18
+python main.py <mode> [arguments]
 ```
 
-#### Arguments:
-- `--mode train`: Specifies that you want to train the model.
-- `--dataset`: Path to the directory containing your dataset.
-- `--class_names`: Path to the text file containing class names.
-- `--epochs`: Number of epochs to train the model (optional).
-- `--batch_size`: The batch size used during training (optional).
-- `--lr`: The learning rate for the optimizer (optional).
-- `--checkpoint`: Filename (without ext) to save the trained model's checkpoint (optional).
-- `--plot_file`: Path to the file where the loss and accuracy plot will be saved (optional).
-- `--model_type`: Select `resnet18` (default) or `mobilenetv3` to train a different model.
+Supported modes:
 
-#### Example for MobileNetV3:
-```bash
-python main.py --mode train --dataset /path/to/your/dataset --epochs 100 --batch_size 8 --lr 0.001 --checkpoint checkpoint/mobilenet_model --class_names /path/to/class_names.txt --model_type mobilenetv3
-```
+* `train`
+* `infer`
+* `test`
+* `split`
 
-#### Output:
-- The model will be trained, and the loss and accuracy plots will be saved in `results/loss_accuracy_plot.png`.
-- The trained model will be saved to the checkpoint file (`checkpoint/screenshot_model`).
+---
 
-### Inference Mode
+## Training
 
-To use a trained model to classify an image, use the following command:
+Trains a model using a training and validation dataset.
 
-```bash
-python main.py --mode inference --model /path/to/model_checkpoint --input /path/to/image.jpg --class_names /path/to/class_names.txt --model_type resnet18
-```
+### Arguments
 
-#### Arguments:
-- `--mode inference`: Specifies that you want to run inference.
-- `--model`: Path to the model checkpoint file (trained model).
-- `--input`: Path to the image file you want to classify.
-- `--class_names`: Path to the text file containing class names.
-- `--model_type`: Select `resnet18` (default) or `mobilenetv3`.
+| Argument           | Description                                              |
+| ------------------ | -------------------------------------------------------- |
+| `-d, --data`       | Path to dataset directory containing `train/` and `val/` |
+| `-t, --model-type` | Model architecture: `resnet` or `mobilenet`              |
+| `-e, --epochs`     | Number of epochs (default: 100)                          |
+| `-b, --batch-size` | Batch size (default: 8)                                  |
+| `--lr`             | Learning rate (default: 0.0001)                          |
+| `-p, --patience`   | Early stopping patience (default: 10)                    |
+| `--lr-patience`    | LR scheduler patience (default: 3)                       |
 
-#### Example for MobileNetV3:
-```bash
-python main.py --mode inference --model /path/to/mobilenet_checkpoint --input /path/to/image.jpg --class_names /path/to/class_names.txt --model_type mobilenetv3
-```
-
-#### Output:
-- The predicted class for the input image will be printed on the console.
-
-
-### Model Conversion (PyTorch to TFLite)
-
-To convert the trained PyTorch model to **TFLite** format for deployment on mobile devices, use the `convert.py` script.
+### Example
 
 ```bash
-python convert.py --model checkpoint/screenshot_best.pt --output models/screenshot.tflite --num_classes 3 --model_type resnet
+python main.py train \
+  --data dataset \
+  --model-type resnet \
+  --epochs 50 \
+  --batch-size 16
 ```
 
-#### Example for MobileNet:
+### Output
+
+* Model checkpoints saved to `checkpoints/`
+* Final trained model saved to `models/`
+* Loss and accuracy plots saved to `results/`
+* Early stopping and LR scheduling applied automatically
+
+---
+
+## Inference
+
+Runs inference on a single image using a trained model checkpoint.
+
+### Arguments
+
+| Argument            | Description                      |
+| ------------------- | -------------------------------- |
+| `-m, --model`       | Path to trained model checkpoint |
+| `-i, --input-image` | Path to input image              |
+
+### Example
+
 ```bash
-python convert.py --model checkpoint/screenshot_mobile_best.pt --output models/screenshot_mobile.tflite --num_classes 3 --model_type mobilenet
+python main.py infer \
+  --model checkpoints/resnet_001.pt \
+  --input-image sample.jpg
 ```
 
-#### Output:
-- A TFLite model file will be generated and saved at the specified path (`models/screenshot_v3.tflite`).
+### Output
 
-## Model and Dataset Structure
+* Prints the predicted class label for the input image
 
-### Model
+---
 
-This pipeline supports two models:
-- **ResNet18**: A deep CNN model with residual connections, commonly used for image classification.
-- **MobileNetV3-Large**: A lightweight, efficient model optimized for mobile devices.
+## Testing
 
-Both models are pre-trained on ImageNet and fine-tuned by replacing the last fully connected layer to match the number of output classes in the dataset.
+Evaluates a trained checkpoint on a labeled test dataset.
 
-### Training Pipeline
+### Arguments
 
-- **Optimizer**: The model is trained using the **Adam** optimizer.
-- **Loss Function**: The **CrossEntropyLoss** criterion is used for classification.
-- **Learning Rate Scheduler**: `ReduceLROnPlateau` dynamically adjusts the learning rate when the validation loss plateaus.
-- **Early Stopping**: Training stops if the validation loss does not improve for a specified number of epochs (`patience`).
+| Argument     | Description                    |
+| ------------ | ------------------------------ |
+| `-d, --data` | Path to test dataset           |
+| `--ckpt`     | Path to saved model checkpoint |
 
-### Dataset
-The dataset should consist of images organized into class directories. Each subdirectory represents a class, and the images inside each subdirectory belong to that class.
+### Example
 
-### Class Names
-Class names should be provided in a text file (`class_names.txt`) where each line corresponds to a class name. The order of the class names in the file should match the order used during model training.
+```bash
+python main.py test \
+  --data test_dataset \
+  --ckpt checkpoints/resnet_001.pt
+```
 
+### Output
+
+* Validation loss
+* Validation accuracy
+
+---
+
+## Dataset Splitting
+
+Splits a dataset into training and validation subsets.
+
+### Arguments
+
+| Argument     | Description                                       |
+| ------------ | ------------------------------------------------- |
+| `-d, --data` | Path to original dataset                          |
+| `-s, --size` | Validation set size (number of samples per class) |
+| `-n, --name` | Name of the new dataset directory                 |
+
+### Example
+
+```bash
+python main.py split \
+  --data raw_dataset \
+  --size 100 \
+  --name dataset
+```
+
+### Output
+
+Creates a new dataset directory with `train/` and `val/` splits.
+
+---
+
+## Model Conversion (PyTorch to TFLite)
+
+Converts a trained PyTorch checkpoint into a TFLite model for mobile deployment.
+
+### ResNet Example
+
+```bash
+python convert.py \
+  --model checkpoints/screenshot_best.pt \
+  --output models/screenshot.tflite \
+  --num_classes 3 \
+  --model_type resnet
+```
+
+### MobileNet Example
+
+```bash
+python convert.py \
+  --model checkpoints/screenshot_mobile_best.pt \
+  --output models/screenshot_mobile.tflite \
+  --num_classes 3 \
+  --model_type mobilenet
+```
+
+### Output
+
+* A `.tflite` model saved at the specified output path
+
+---
