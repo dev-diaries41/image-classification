@@ -17,7 +17,6 @@ gast==0.6.0
 google-pasta==0.2.0
 grpcio==1.70.0
 h5py==3.13.0
-hebbian_mlp @ git+https://github.com/dev-diaries41/hebbian-mlp.git@e66e587104b4f736e6e6979d3b8982de3be097e2
 idna==3.10
 immutabledict==4.2.1
 iniconfig==2.0.0

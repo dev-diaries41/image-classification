@@ -1,6 +1,5 @@
 import torch.nn as nn
 import torchvision.models as models
-from hebbian_mlp import HebbianMLP
 
 class ImageClassifier(nn.Module):
     def __init__(self, num_classes, architecture='resnet', weights=None):
@@ -28,24 +27,4 @@ class ImageClassifier(nn.Module):
 
     def forward(self, x):
         return self.model(x)
-    
-
-class ImageClassifierWithMLP(nn.Module):
-    def __init__(self, num_classes, backbone='resnet', mlp_hidden=256, alpha_hebb = 5e-3, gate_fn = None):
-        super().__init__()
-        if backbone == 'resnet':
-            self.backbone = models.resnet18(weights=models.ResNet18_Weights.DEFAULT)
-            in_features = self.backbone.fc.in_features
-            self.backbone.fc = nn.Identity()  # remove final fc
-        elif backbone == 'mobilenet':
-            self.backbone = models.mobilenet_v3_large(weights=models.MobileNet_V3_Large_Weights.DEFAULT)
-            in_features = self.backbone.classifier[-1].in_features
-            self.backbone.classifier[-1] = nn.Identity()
-        else:
-            raise ValueError("Backbone not supported")
-        self.mlp = HebbianMLP(layer_sizes=[in_features, mlp_hidden, num_classes], gate_fn=gate_fn, alpha_hebb=alpha_hebb)
-        
-    def forward(self, x, return_activations=False):
-        features = self.backbone(x)
-        return self.mlp(features, return_activations=return_activations)
     
