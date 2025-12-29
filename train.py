@@ -13,7 +13,6 @@ class TrainConfig:
     checkpoint_save_path: str
     model_save_path: str
     model_type: str
-    use_hebb: bool
     epochs: int = 100
     batch_size: int = 8
     lr: float = 0.0001
@@ -36,8 +35,7 @@ def train(model, config: TrainConfig, train_dataset_dir: str, val_dataset_dir: s
 
     best_loss = float("inf")
     patience_counter = 0  # Tracks epochs without improvement
-    use_hebb = hasattr(model, "mlp")
-
+    
     train_dataset = get_dataset(train_dataset_dir)        
     train_loader = DataLoader(train_dataset, batch_size=config.batch_size, shuffle=True)
 
@@ -52,16 +50,9 @@ def train(model, config: TrainConfig, train_dataset_dir: str, val_dataset_dir: s
             images = batch["image"].to(device)
             labels = batch["label"].to(device)
             optimizer.zero_grad()
-            if use_hebb:
-                y_pred, acts = model(images, return_activations = True)
-            else:
-                 y_pred = model(images)
+            y_pred = model(images)
             loss = criterion(y_pred, labels)
             loss.backward()
-            
-            if use_hebb and epoch > 1:
-                model.mlp.apply_hebb(acts, loss = loss.item(), avg_loss = np.mean(train_history[-5:] if len(train_history) >= 1 else 1))
-
             optimizer.step()
             running_loss += loss.item()
         
